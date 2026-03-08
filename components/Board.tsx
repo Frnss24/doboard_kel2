@@ -16,10 +16,11 @@ import { arrayMove } from "@dnd-kit/sortable";
 import Column from "./Column";
 import TaskCard from "./TaskCard";
 import AddTaskModal from "./AddTaskModal";
-import { initialColumns, ColumnData, Task, Priority } from "@/lib/data";
+import { Task, Priority } from "@/lib/data";
+import { useSupabaseTasks } from "@/hooks/useSupabaseTasks";
 
 export default function Board() {
-  const [columns, setColumns] = useState<ColumnData[]>(initialColumns);
+  const { columns, setColumns, loading, addTask, moveTask, reorderTasks } = useSupabaseTasks();
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [modalColumnId, setModalColumnId] = useState("todo");
@@ -116,47 +117,35 @@ export default function Board() {
             ...newColumns[colIndex],
             tasks: arrayMove(newColumns[colIndex].tasks, oldIndex, newIndex),
           };
+          // Persist reorder to Supabase
+          reorderTasks(newColumns[colIndex].id, newColumns[colIndex].tasks);
           return newColumns;
         });
+      }
+    } else {
+      // Task moved between columns — persist to Supabase
+      const targetCol = columns.find((c) => c.id === overColumn.id);
+      if (targetCol) {
+        const task = targetCol.tasks.find((t) => t.id === active.id);
+        if (task) {
+          const newPos = targetCol.tasks.indexOf(task);
+          moveTask(task.id, overColumn.id, newPos);
+        }
       }
     }
   };
 
   const handleAddTask = useCallback(
-    (task: {
+    async (task: {
       title: string;
       description: string;
       priority: Priority;
       dueDate: string;
       assigneeName: string;
     }) => {
-      const newTask: Task = {
-        id: `task-${Date.now()}`,
-        title: task.title,
-        description: task.description,
-        priority: task.priority,
-        dueDate: task.dueDate
-          ? new Date(task.dueDate).toLocaleDateString("en-US", {
-              month: "short",
-              day: "numeric",
-              year: "numeric",
-            })
-          : "No date",
-        assignee: {
-          name: task.assigneeName || "Unassigned",
-          avatar: (task.assigneeName || "U")[0].toUpperCase(),
-        },
-      };
-
-      setColumns((prev) =>
-        prev.map((col) =>
-          col.id === modalColumnId
-            ? { ...col, tasks: [...col.tasks, newTask] }
-            : col
-        )
-      );
+      await addTask(modalColumnId, task);
     },
-    [modalColumnId]
+    [modalColumnId, addTask]
   );
 
   const openModal = (columnId: string) => {
@@ -171,8 +160,10 @@ export default function Board() {
         <div>
           <h1 className="text-xl font-bold text-gray-900">Product Roadmap</h1>
           <p className="mt-0.5 text-sm text-gray-500">
-            {doneTasks} of {totalTasks} tasks completed ·{" "}
-            <span className="font-medium text-green-600">{progress}%</span>
+            {loading ? "Loading..." : (
+              <>{doneTasks} of {totalTasks} tasks completed ·{" "}
+              <span className="font-medium text-green-600">{progress}%</span></>
+            )}
           </p>
         </div>
         <div className="flex items-center gap-3">
