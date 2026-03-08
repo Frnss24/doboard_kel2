@@ -1,10 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+
+const navItems = [
+  { label: "Board", href: "/" },
+  { label: "Timeline", href: "/timeline" },
+  { label: "Reports", href: "/reports" },
+];
 
 export default function Navbar() {
-  const [activeTab, setActiveTab] = useState("Board");
-  const navItems = ["Board", "Timeline", "Reports"];
+  const pathname = usePathname();
 
   return (
     <nav className="flex items-center justify-between border-b border-gray-200 bg-white px-6 py-3">
@@ -32,19 +38,22 @@ export default function Navbar() {
 
         {/* Navigation */}
         <div className="flex items-center gap-1">
-          {navItems.map((item) => (
-            <button
-              key={item}
-              onClick={() => setActiveTab(item)}
-              className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-                activeTab === item
-                  ? "bg-blue-50 text-blue-600"
-                  : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
-              }`}
-            >
-              {item}
-            </button>
-          ))}
+          {navItems.map((item) => {
+            const isActive = pathname === item.href;
+            return (
+              <Link
+                key={item.label}
+                href={item.href}
+                className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                  isActive
+                    ? "bg-blue-50 text-blue-600"
+                    : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                }`}
+              >
+                {item.label}
+              </Link>
+            );
+          })}
         </div>
       </div>
 
