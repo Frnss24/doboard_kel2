@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useId } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -24,6 +24,7 @@ export default function Board() {
   const [modalOpen, setModalOpen] = useState(false);
   const [modalColumnId, setModalColumnId] = useState("todo");
 
+  const dndId = useId();
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
   );
@@ -213,6 +214,7 @@ export default function Board() {
       {/* Board */}
       <div className="flex-1 overflow-x-auto p-6">
         <DndContext
+          id={dndId}
           sensors={sensors}
           collisionDetection={closestCorners}
           onDragStart={handleDragStart}
