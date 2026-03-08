@@ -1,6 +1,6 @@
 "use client"
 
-import { initialColumns } from "@/lib/data"
+import { useSupabaseTasks } from "@/hooks/useSupabaseTasks"
 
 import StatsCard from "@/components/reports/StatsCard"
 import StatusChart from "@/components/reports/StatusChart"
@@ -9,6 +9,8 @@ import WeeklyVelocity from "@/components/reports/WeeklyVelocity"
 import RecentActivity from "@/components/reports/RecentActivity"
 
 export default function ReportsPage() {
+
+  const { columns: initialColumns, loading } = useSupabaseTasks()
 
   const allTasks = initialColumns.flatMap(col => col.tasks)
 
@@ -76,6 +78,9 @@ export default function ReportsPage() {
 
       <div className="p-6 space-y-6">
 
+        {loading ? (
+          <p className="text-sm text-gray-400">Loading reports...</p>
+        ) : (<>
         <div className="grid grid-cols-4 gap-4">
           <StatsCard title="Total Tasks" value={totalTasks}/>
           <StatsCard title="Completed" value={done}/>
@@ -93,6 +98,7 @@ export default function ReportsPage() {
           <RecentActivity/>
         </div>
 
+        </>)}
       </div>
 
     </div>

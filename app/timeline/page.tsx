@@ -1,5 +1,5 @@
 "use client";
-import { initialColumns } from "@/lib/data";
+import { useSupabaseTasks } from "@/hooks/useSupabaseTasks";
 
 const DAYS = 30;
 const DAY_WIDTH = 40;
@@ -18,6 +18,7 @@ function getDayOffset(dateStr: string) {
 }
 
 export default function TimelinePage() {
+  const { columns: initialColumns, loading } = useSupabaseTasks();
   const today = new Date();
   const todayOffset = Math.floor((today.getTime() - START_DATE.getTime()) / (1000 * 60 * 60 * 24)) * DAY_WIDTH;
 
@@ -34,6 +35,9 @@ export default function TimelinePage() {
         <p className="text-sm text-gray-500 mt-1">Gantt view</p>
       </div>
 
+      {loading ? (
+        <p className="text-sm text-gray-400">Loading tasks...</p>
+      ) : (<>
       <div className="flex items-center gap-4 mb-4">
         {[["todo","To Do"],["in-progress","In Progress"],["done","Done"]].map(([key, label]) => (
           <div key={key} className="flex items-center gap-1.5">
@@ -95,6 +99,7 @@ export default function TimelinePage() {
       <p className="mt-3 text-xs text-gray-400">
         🔵 Blue line marks today — {today.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
       </p>
+      </>)}
     </div>
   );
 }
