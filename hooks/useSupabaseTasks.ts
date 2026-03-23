@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { ColumnData, Task, Priority } from "@/lib/data";
+import { useSupabaseAuth } from "@/hooks/useSupabaseAuth";
 
 const COLUMN_META: Record<string, { color: string; dotColor: string }> = {
   todo: { color: "bg-blue-100 text-blue-700", dotColor: "bg-blue-500" },
@@ -12,6 +13,7 @@ const COLUMN_META: Record<string, { color: string; dotColor: string }> = {
 
 interface DbTask {
   id: string;
+  user_id: string;
   column_id: string;
   title: string;
   description: string;
@@ -79,26 +81,42 @@ function toTask(row: DbTask): Task {
 }
 
 export function useSupabaseTasks() {
+  const { user, loading: authLoading } = useSupabaseAuth();
   const [columns, setColumns] = useState<ColumnData[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
+    if (authLoading) return;
+
     setLoading(true);
 
     try {
-      const [colRes, taskRes] = await Promise.all([
-        supabase.from("columns").select("*").order("position"),
-        supabase.from("tasks").select("*").order("position"),
-      ]);
+      const colRes = await supabase.from("columns").select("*").order("position");
 
-      if (colRes.error || taskRes.error) {
-        console.error("Supabase fetch error:", formatSupabaseError(colRes.error ?? taskRes.error));
+      if (colRes.error) {
+        console.error("Supabase fetch error:", formatSupabaseError(colRes.error));
         setLoading(false);
         return;
       }
 
+      let dbTasks: DbTask[] = [];
+
+      if (user) {
+        const taskRes = await supabase
+          .from("tasks")
+          .select("*")
+          .eq("user_id", user.id)
+          .order("position");
+
+        if (taskRes.error) {
+          console.error("Supabase fetch error:", formatSupabaseError(taskRes.error));
+          setLoading(false);
+          return;
+        }
+
+        dbTasks = taskRes.data as DbTask[];
+      }
       const dbColumns = colRes.data as DbColumn[];
-      const dbTasks = taskRes.data as DbTask[];
 
       const mapped: ColumnData[] = dbColumns.map((col) => ({
         id: col.id,
@@ -116,7 +134,7 @@ export function useSupabaseTasks() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [authLoading, user]);
 
   useEffect(() => {
     fetchData();
@@ -133,12 +151,18 @@ export function useSupabaseTasks() {
         assigneeName: string;
       }
     ) => {
+      if (!user) {
+        console.error("Insert error:", { message: "User must be logged in" });
+        return;
+      }
+
       const col = columns.find((c) => c.id === columnId);
       const position = col ? col.tasks.length : 0;
 
       const { data, error } = await supabase
         .from("tasks")
         .insert({
+          user_id: user.id,
           column_id: columnId,
           title: task.title,
           description: task.description,
@@ -163,23 +187,34 @@ export function useSupabaseTasks() {
         )
       );
     },
-    [columns]
+    [columns, user]
   );
 
   const moveTask = useCallback(
     async (taskId: string, newColumnId: string, newPosition: number) => {
+      if (!user) {
+        console.error("Move error:", { message: "User must be logged in" });
+        return;
+      }
+
       const { error } = await supabase
         .from("tasks")
         .update({ column_id: newColumnId, position: newPosition })
-        .eq("id", taskId);
+        .eq("id", taskId)
+        .eq("user_id", user.id);
 
       if (error) console.error("Move error:", formatSupabaseError(error));
     },
-    []
+    [user]
   );
 
   const reorderTasks = useCallback(
     async (columnId: string, tasks: Task[]) => {
+      if (!user) {
+        console.error("Reorder error:", { message: "User must be logged in" });
+        return;
+      }
+
       const updates = tasks.map((t, i) => ({
         id: t.id,
         column_id: columnId,
@@ -190,7 +225,8 @@ export function useSupabaseTasks() {
         const { error } = await supabase
           .from("tasks")
           .update({ position: u.position, column_id: u.column_id })
-          .eq("id", u.id);
+          .eq("id", u.id)
+          .eq("user_id", user.id);
 
         if (error) {
           console.error("Reorder error:", formatSupabaseError(error));
@@ -198,7 +234,7 @@ export function useSupabaseTasks() {
         }
       }
     },
-    []
+    [user]
   );
 
   return { columns, setColumns, loading, addTask, moveTask, reorderTasks, refetch: fetchData };
