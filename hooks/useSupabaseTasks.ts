@@ -38,26 +38,75 @@ function formatSupabaseError(error: unknown) {
   }
 
   if (error instanceof Error) {
-    return { message: error.message, stack: error.stack };
+    const base = error as Error & {
+      details?: string;
+      hint?: string;
+      code?: string;
+      status?: number;
+    };
+
+    return {
+      name: base.name,
+      message: base.message || "Unknown error",
+      details: base.details ?? null,
+      hint: base.hint ?? null,
+      code: base.code ?? null,
+      status: base.status ?? null,
+      stack: base.stack ?? null,
+    };
   }
 
   if (typeof error === "object") {
     const maybeError = error as {
+      name?: string;
       message?: string;
       details?: string;
       hint?: string;
       code?: string;
+      status?: number;
+      error_description?: string;
+      error?: string;
     };
 
+    const objectKeys = Object.getOwnPropertyNames(error);
+
+    let serialized: string | null = null;
+    try {
+      serialized = JSON.stringify(error);
+    } catch {
+      serialized = null;
+    }
+
     return {
-      message: maybeError.message ?? "Unknown error",
+      name: maybeError.name ?? null,
+      message:
+        maybeError.message ??
+        maybeError.error_description ??
+        maybeError.error ??
+        "Unknown error",
       details: maybeError.details ?? null,
       hint: maybeError.hint ?? null,
       code: maybeError.code ?? null,
+      status: maybeError.status ?? null,
+      keys: objectKeys,
+      serialized,
     };
   }
 
   return { message: String(error) };
+}
+
+function logSupabaseError(label: string, error: unknown) {
+  const parsed = formatSupabaseError(error);
+  console.error(`${label}: ${parsed.message}`, parsed);
+
+  // Common migration mistake: tasks.user_id column not created yet.
+  const messageText = String(parsed.message || "").toLowerCase();
+  if (messageText.includes("user_id") && (messageText.includes("column") || messageText.includes("does not exist"))) {
+    console.error(
+      "Schema hint: add tasks.user_id in Supabase SQL Editor -> alter table public.tasks add column if not exists user_id uuid references auth.users(id) on delete cascade;"
+    );
+  }
 }
 
 function formatDate(dateStr: string | null): string {
@@ -94,8 +143,7 @@ export function useSupabaseTasks() {
       const colRes = await supabase.from("columns").select("*").order("position");
 
       if (colRes.error) {
-        console.error("Supabase fetch error:", formatSupabaseError(colRes.error));
-        setLoading(false);
+        logSupabaseError("Supabase fetch error", colRes.error);
         return;
       }
 
@@ -109,8 +157,7 @@ export function useSupabaseTasks() {
           .order("position");
 
         if (taskRes.error) {
-          console.error("Supabase fetch error:", formatSupabaseError(taskRes.error));
-          setLoading(false);
+          logSupabaseError("Supabase fetch error", taskRes.error);
           return;
         }
 
@@ -130,7 +177,7 @@ export function useSupabaseTasks() {
 
       setColumns(mapped);
     } catch (error) {
-      console.error("Supabase fetch exception:", formatSupabaseError(error));
+      logSupabaseError("Supabase fetch exception", error);
     } finally {
       setLoading(false);
     }
@@ -152,7 +199,7 @@ export function useSupabaseTasks() {
       }
     ) => {
       if (!user) {
-        console.error("Insert error:", { message: "User must be logged in" });
+        logSupabaseError("Insert error", { message: "User must be logged in" });
         return;
       }
 
@@ -176,7 +223,7 @@ export function useSupabaseTasks() {
         .single();
 
       if (error) {
-        console.error("Insert error:", formatSupabaseError(error));
+        logSupabaseError("Insert error", error);
         return;
       }
 
@@ -193,7 +240,7 @@ export function useSupabaseTasks() {
   const moveTask = useCallback(
     async (taskId: string, newColumnId: string, newPosition: number) => {
       if (!user) {
-        console.error("Move error:", { message: "User must be logged in" });
+        logSupabaseError("Move error", { message: "User must be logged in" });
         return;
       }
 
@@ -203,7 +250,7 @@ export function useSupabaseTasks() {
         .eq("id", taskId)
         .eq("user_id", user.id);
 
-      if (error) console.error("Move error:", formatSupabaseError(error));
+      if (error) logSupabaseError("Move error", error);
     },
     [user]
   );
@@ -211,7 +258,7 @@ export function useSupabaseTasks() {
   const reorderTasks = useCallback(
     async (columnId: string, tasks: Task[]) => {
       if (!user) {
-        console.error("Reorder error:", { message: "User must be logged in" });
+        logSupabaseError("Reorder error", { message: "User must be logged in" });
         return;
       }
 
@@ -229,7 +276,7 @@ export function useSupabaseTasks() {
           .eq("user_id", user.id);
 
         if (error) {
-          console.error("Reorder error:", formatSupabaseError(error));
+          logSupabaseError("Reorder error", error);
           break;
         }
       }
