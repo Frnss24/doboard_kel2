@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useId } from "react";
+import { useState, useCallback, useId, useEffect } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -13,15 +13,21 @@ import {
   closestCorners,
 } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
+import { useRouter } from "next/navigation";
 import Column from "./Column";
 import TaskCard from "./TaskCard";
 import AddTaskModal from "./AddTaskModal";
 import { Task, Priority } from "@/lib/data";
 import { useSupabaseTasks } from "@/hooks/useSupabaseTasks";
+import { useSupabaseAuth } from "@/hooks/useSupabaseAuth";
 
 export default function Board() {
-  const { columns, setColumns, loading, addTask, moveTask, reorderTasks } = useSupabaseTasks();
+  const router = useRouter();
+  const { columns, setColumns, loading, addTask, reorderTasks } = useSupabaseTasks();
+  const { user, loading: authLoading } = useSupabaseAuth();
   const [activeTask, setActiveTask] = useState<Task | null>(null);
+  const [activeColumnId, setActiveColumnId] = useState<string | null>(null);
+  const [authNotice, setAuthNotice] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [modalColumnId, setModalColumnId] = useState("todo");
 
@@ -29,6 +35,12 @@ export default function Board() {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
   );
+
+  useEffect(() => {
+    if (!authLoading && !user) {
+      setModalOpen(false);
+    }
+  }, [authLoading, user]);
 
   const totalTasks = columns.reduce((sum, col) => sum + col.tasks.length, 0);
   const doneTasks = columns.find((c) => c.id === "done")?.tasks.length ?? 0;
@@ -46,13 +58,25 @@ export default function Board() {
   );
 
   const handleDragStart = (event: DragStartEvent) => {
+    if (authLoading || !user) {
+      setActiveTask(null);
+      setActiveColumnId(null);
+      if (!authLoading) {
+        setAuthNotice("Login dulu untuk memindahkan task.");
+      }
+      return;
+    }
+
     const { active } = event;
     const column = findColumn(active.id as string);
     const task = column?.tasks.find((t) => t.id === active.id);
     if (task) setActiveTask(task);
+    setActiveColumnId(column?.id ?? null);
   };
 
   const handleDragOver = (event: DragOverEvent) => {
+    if (authLoading || !user) return;
+
     const { active, over } = event;
     if (!over) return;
 
@@ -95,17 +119,33 @@ export default function Board() {
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
+    if (authLoading || !user) {
+      setActiveTask(null);
+      setActiveColumnId(null);
+      if (!authLoading) {
+        setAuthNotice("Login dulu untuk memindahkan task.");
+      }
+      return;
+    }
+
     const { active, over } = event;
     setActiveTask(null);
 
-    if (!over) return;
+    if (!over || !activeColumnId) {
+      setActiveColumnId(null);
+      return;
+    }
 
-    const activeColumn = findColumn(active.id as string);
-    const overColumn = findColumn(over.id as string);
+    const overColumnById = columns.find((c) => c.id === (over.id as string));
+    const overColumn = overColumnById ?? findColumn(over.id as string);
+    const activeColumn = columns.find((c) => c.id === activeColumnId) ?? findColumn(active.id as string);
 
-    if (!activeColumn || !overColumn) return;
+    if (!activeColumn || !overColumn) {
+      setActiveColumnId(null);
+      return;
+    }
 
-    if (activeColumn.id === overColumn.id) {
+    if (activeColumnId === overColumn.id) {
       const colIndex = columns.findIndex((c) => c.id === activeColumn.id);
       const oldIndex = columns[colIndex].tasks.findIndex((t) => t.id === active.id);
       const newIndex = columns[colIndex].tasks.findIndex((t) => t.id === over.id);
@@ -123,16 +163,45 @@ export default function Board() {
         });
       }
     } else {
-      // Task moved between columns — persist to Supabase
-      const targetCol = columns.find((c) => c.id === overColumn.id);
-      if (targetCol) {
-        const task = targetCol.tasks.find((t) => t.id === active.id);
-        if (task) {
-          const newPos = targetCol.tasks.indexOf(task);
-          moveTask(task.id, overColumn.id, newPos);
-        }
-      }
+      // Persist cross-column move based on latest state and original source column.
+      setColumns((prev) => {
+        const sourceColIndex = prev.findIndex((c) => c.id === activeColumnId);
+        const targetColIndex = prev.findIndex((c) => c.id === overColumn.id);
+
+        if (sourceColIndex < 0 || targetColIndex < 0) return prev;
+
+        const sourceCol = prev[sourceColIndex];
+        const targetCol = prev[targetColIndex];
+
+        const movedTask =
+          sourceCol.tasks.find((t) => t.id === active.id) ??
+          targetCol.tasks.find((t) => t.id === active.id);
+        if (!movedTask) return prev;
+
+        const nextSourceTasks = sourceCol.tasks.filter((t) => t.id !== active.id);
+        const nextTargetBase = targetCol.tasks.filter((t) => t.id !== active.id);
+
+        const overTaskIndex = nextTargetBase.findIndex((t) => t.id === over.id);
+        const insertIndex = overTaskIndex >= 0 ? overTaskIndex : nextTargetBase.length;
+
+        const nextTargetTasks = [
+          ...nextTargetBase.slice(0, insertIndex),
+          movedTask,
+          ...nextTargetBase.slice(insertIndex),
+        ];
+
+        const newColumns = [...prev];
+        newColumns[sourceColIndex] = { ...sourceCol, tasks: nextSourceTasks };
+        newColumns[targetColIndex] = { ...targetCol, tasks: nextTargetTasks };
+
+        reorderTasks(newColumns[sourceColIndex].id, newColumns[sourceColIndex].tasks);
+        reorderTasks(newColumns[targetColIndex].id, newColumns[targetColIndex].tasks);
+
+        return newColumns;
+      });
     }
+
+    setActiveColumnId(null);
   };
 
   const handleAddTask = useCallback(
@@ -143,12 +212,28 @@ export default function Board() {
       dueDate: string;
       assigneeName: string;
     }) => {
+      if (!user) {
+        setAuthNotice("Kamu harus login dulu sebelum menambah task.");
+        router.push("/login?next=/");
+        return;
+      }
+
       await addTask(modalColumnId, task);
+      setAuthNotice(null);
     },
-    [modalColumnId, addTask]
+    [modalColumnId, addTask, router, user]
   );
 
   const openModal = (columnId: string) => {
+    if (authLoading) return;
+
+    if (!user) {
+      setAuthNotice("Kamu harus register/login dulu sebelum membuat task.");
+      router.push("/login?next=/");
+      return;
+    }
+
+    setAuthNotice(null);
     setModalColumnId(columnId);
     setModalOpen(true);
   };
@@ -165,6 +250,11 @@ export default function Board() {
               <span className="font-medium text-green-600">{progress}%</span></>
             )}
           </p>
+          {authNotice && (
+            <p className="mt-2 inline-flex rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">
+              {authNotice}
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-3">
           {/* View toggles */}

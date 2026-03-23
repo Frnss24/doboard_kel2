@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useSupabaseAuth } from "@/hooks/useSupabaseAuth";
 
 const navItems = [
   { label: "Board", href: "/" },
@@ -11,6 +12,18 @@ const navItems = [
 
 export default function Navbar() {
   const pathname = usePathname();
+  const { user, loading, signOut } = useSupabaseAuth();
+
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+    } catch (error) {
+      console.error("Logout error:", error);
+    }
+  };
+
+  const userLabel = user?.user_metadata?.full_name || user?.email || "User";
+  const userAvatar = userLabel.slice(0, 1).toUpperCase();
 
   return (
     <nav className="flex items-center justify-between border-b border-gray-200 bg-white px-6 py-3">
@@ -99,26 +112,40 @@ export default function Navbar() {
           <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-red-500" />
         </button>
 
-        {/* User Profile */}
-        <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-sm font-semibold text-white">
-            JD
+        {/* User Profile / Auth Actions */}
+        {loading ? (
+          <div className="h-9 w-28 animate-pulse rounded-lg bg-gray-100" />
+        ) : user ? (
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-sm font-semibold text-white">
+                {userAvatar}
+              </div>
+              <span className="max-w-40 truncate text-sm font-medium text-gray-700">{userLabel}</span>
+            </div>
+            <button
+              onClick={handleSignOut}
+              className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+            >
+              Logout
+            </button>
           </div>
-          <span className="text-sm font-medium text-gray-700">Jane Doe</span>
-          <svg
-            className="h-4 w-4 text-gray-400"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M19 9l-7 7-7-7"
-            />
-          </svg>
-        </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <Link
+              href="/login"
+              className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+            >
+              Login
+            </Link>
+            <Link
+              href="/login?mode=signup"
+              className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+            >
+              Register
+            </Link>
+          </div>
+        )}
       </div>
     </nav>
   );

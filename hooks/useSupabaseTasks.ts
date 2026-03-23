@@ -30,6 +30,34 @@ interface DbColumn {
   position: number;
 }
 
+function formatSupabaseError(error: unknown) {
+  if (!error) {
+    return { message: "Unknown error" };
+  }
+
+  if (error instanceof Error) {
+    return { message: error.message, stack: error.stack };
+  }
+
+  if (typeof error === "object") {
+    const maybeError = error as {
+      message?: string;
+      details?: string;
+      hint?: string;
+      code?: string;
+    };
+
+    return {
+      message: maybeError.message ?? "Unknown error",
+      details: maybeError.details ?? null,
+      hint: maybeError.hint ?? null,
+      code: maybeError.code ?? null,
+    };
+  }
+
+  return { message: String(error) };
+}
+
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return "No date";
   return new Date(dateStr).toLocaleDateString("en-US", {
@@ -55,32 +83,39 @@ export function useSupabaseTasks() {
   const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
-    const [colRes, taskRes] = await Promise.all([
-      supabase.from("columns").select("*").order("position"),
-      supabase.from("tasks").select("*").order("position"),
-    ]);
+    setLoading(true);
 
-    if (colRes.error || taskRes.error) {
-      console.error("Supabase fetch error:", colRes.error ?? taskRes.error);
+    try {
+      const [colRes, taskRes] = await Promise.all([
+        supabase.from("columns").select("*").order("position"),
+        supabase.from("tasks").select("*").order("position"),
+      ]);
+
+      if (colRes.error || taskRes.error) {
+        console.error("Supabase fetch error:", formatSupabaseError(colRes.error ?? taskRes.error));
+        setLoading(false);
+        return;
+      }
+
+      const dbColumns = colRes.data as DbColumn[];
+      const dbTasks = taskRes.data as DbTask[];
+
+      const mapped: ColumnData[] = dbColumns.map((col) => ({
+        id: col.id,
+        title: col.title,
+        color: col.color ?? COLUMN_META[col.id]?.color ?? "",
+        dotColor: col.dot_color ?? COLUMN_META[col.id]?.dotColor ?? "",
+        tasks: dbTasks
+          .filter((t) => t.column_id === col.id)
+          .map(toTask),
+      }));
+
+      setColumns(mapped);
+    } catch (error) {
+      console.error("Supabase fetch exception:", formatSupabaseError(error));
+    } finally {
       setLoading(false);
-      return;
     }
-
-    const dbColumns = colRes.data as DbColumn[];
-    const dbTasks = taskRes.data as DbTask[];
-
-    const mapped: ColumnData[] = dbColumns.map((col) => ({
-      id: col.id,
-      title: col.title,
-      color: col.color ?? COLUMN_META[col.id]?.color ?? "",
-      dotColor: col.dot_color ?? COLUMN_META[col.id]?.dotColor ?? "",
-      tasks: dbTasks
-        .filter((t) => t.column_id === col.id)
-        .map(toTask),
-    }));
-
-    setColumns(mapped);
-    setLoading(false);
   }, []);
 
   useEffect(() => {
@@ -117,7 +152,7 @@ export function useSupabaseTasks() {
         .single();
 
       if (error) {
-        console.error("Insert error:", error);
+        console.error("Insert error:", formatSupabaseError(error));
         return;
       }
 
@@ -138,7 +173,7 @@ export function useSupabaseTasks() {
         .update({ column_id: newColumnId, position: newPosition })
         .eq("id", taskId);
 
-      if (error) console.error("Move error:", error);
+      if (error) console.error("Move error:", formatSupabaseError(error));
     },
     []
   );
@@ -152,10 +187,15 @@ export function useSupabaseTasks() {
       }));
 
       for (const u of updates) {
-        await supabase
+        const { error } = await supabase
           .from("tasks")
           .update({ position: u.position, column_id: u.column_id })
           .eq("id", u.id);
+
+        if (error) {
+          console.error("Reorder error:", formatSupabaseError(error));
+          break;
+        }
       }
     },
     []
