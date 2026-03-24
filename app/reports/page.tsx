@@ -1,6 +1,7 @@
 "use client"
 
 import { useSupabaseTasks } from "@/hooks/useSupabaseTasks"
+import { Task } from "@/lib/data"
 
 import StatsCard from "@/components/reports/StatsCard"
 import StatusChart from "@/components/reports/StatusChart"
@@ -8,22 +9,79 @@ import PriorityChart from "@/components/reports/PriorityChart"
 import WeeklyVelocity from "@/components/reports/WeeklyVelocity"
 import RecentActivity from "@/components/reports/RecentActivity"
 
+function getWeekStart(date: Date) {
+  const d = new Date(date)
+  const day = d.getDay()
+  const diff = d.getDate() - day
+  d.setDate(diff)
+  d.setHours(0, 0, 0, 0)
+  return d
+}
+
+function buildWeeklyVelocity(columns: { id: string; tasks: Task[] }[]) {
+  const buckets = new Map<string, { week: string; added: number; completed: number }>()
+
+  const ensureBucket = (weekStart: Date) => {
+    const key = weekStart.toISOString().slice(0, 10)
+    if (!buckets.has(key)) {
+      buckets.set(key, {
+        week: weekStart.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+        added: 0,
+        completed: 0,
+      })
+    }
+    return buckets.get(key)!
+  }
+
+  for (const column of columns) {
+    for (const task of column.tasks) {
+      if (!task.dueDateRaw) continue
+      const due = new Date(task.dueDateRaw)
+      if (Number.isNaN(due.getTime())) continue
+
+      const bucket = ensureBucket(getWeekStart(due))
+      bucket.added += 1
+      if (column.id === "done") {
+        bucket.completed += 1
+      }
+    }
+  }
+
+  return Array.from(buckets.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .slice(-8)
+    .map(([, value]) => value)
+}
+
+function buildRecentActivities(columns: { id: string; title: string; tasks: Task[] }[]) {
+  return columns
+    .flatMap((column) =>
+      column.tasks.map((task) => ({
+        text: `${task.title} · ${column.title}`,
+        sortDate: task.dueDateRaw ? new Date(task.dueDateRaw).getTime() : 0,
+      }))
+    )
+    .sort((a, b) => b.sortDate - a.sortDate)
+    .slice(0, 6)
+    .map((item) => item.text)
+}
+
 export default function ReportsPage() {
 
-  const { columns: initialColumns, loading } = useSupabaseTasks()
+  const { columns, loading } = useSupabaseTasks()
 
-  const allTasks = initialColumns.flatMap(col => col.tasks)
+  const allTasks = columns.flatMap(col => col.tasks)
 
   const totalTasks = allTasks.length
 
   const done =
-    initialColumns.find(c => c.id === "done")?.tasks.length ?? 0
+    columns.find(c => c.id === "done")?.tasks.length ?? 0
 
   const inProgress =
-    initialColumns.find(c => c.id === "in-progress")?.tasks.length ?? 0
+    columns.find(c => c.id === "in-progress")?.tasks.length ?? 0
 
   const todo =
-    initialColumns.find(c => c.id === "todo")?.tasks.length ?? 0
+    columns.find(c => c.id === "todo")?.tasks.length ?? 0
 
   const priorityData = [
     {
@@ -49,16 +107,8 @@ export default function ReportsPage() {
     {name:"Done",value:done}
   ]
 
-  const weeklyData = [
-    {week:"Jan 12",added:3,completed:1},
-    {week:"Jan 19",added:2,completed:2},
-    {week:"Jan 26",added:4,completed:3},
-    {week:"Feb 2",added:2,completed:2},
-    {week:"Feb 9",added:3,completed:4},
-    {week:"Feb 16",added:5,completed:3},
-    {week:"Feb 23",added:4,completed:5},
-    {week:"Mar 2",added:3,completed:4}
-  ]
+  const weeklyData = buildWeeklyVelocity(columns)
+  const recentActivities = buildRecentActivities(columns)
 
   return (
 
@@ -95,7 +145,7 @@ export default function ReportsPage() {
 
         <div className="grid grid-cols-2 gap-4">
           <WeeklyVelocity data={weeklyData}/>
-          <RecentActivity/>
+          <RecentActivity activities={recentActivities}/>
         </div>
 
         </>)}

@@ -2,7 +2,17 @@
 
 import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts"
 
-export default function PriorityChart({ data }: any) {
+interface PriorityItem {
+  name: string
+  value: number
+  color: string
+}
+
+interface PriorityChartProps {
+  data: PriorityItem[]
+}
+
+export default function PriorityChart({ data }: PriorityChartProps) {
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
@@ -22,7 +32,7 @@ export default function PriorityChart({ data }: any) {
             outerRadius={90}
           >
 
-            {data.map((entry:any, index:number) => (
+            {data.map((entry, index) => (
               <Cell key={index} fill={entry.color}/>
             ))}
 

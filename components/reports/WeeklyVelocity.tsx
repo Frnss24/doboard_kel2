@@ -8,7 +8,17 @@ import {
   ResponsiveContainer
 } from "recharts"
 
-export default function WeeklyVelocity({ data }: any) {
+interface WeeklyVelocityItem {
+  week: string
+  added: number
+  completed: number
+}
+
+interface WeeklyVelocityProps {
+  data: WeeklyVelocityItem[]
+}
+
+export default function WeeklyVelocity({ data }: WeeklyVelocityProps) {
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
@@ -17,28 +27,34 @@ export default function WeeklyVelocity({ data }: any) {
         Weekly Velocity
       </h3>
 
-      <ResponsiveContainer width="100%" height={260}>
+      {data.length > 0 ? (
+        <ResponsiveContainer width="100%" height={260}>
 
-        <LineChart data={data}>
+          <LineChart data={data}>
 
-          <XAxis dataKey="week"/>
-          <Tooltip/>
+            <XAxis dataKey="week"/>
+            <Tooltip/>
 
-          <Line
-            dataKey="added"
-            stroke="#6366f1"
-            strokeWidth={3}
-          />
+            <Line
+              dataKey="added"
+              stroke="#6366f1"
+              strokeWidth={3}
+            />
 
-          <Line
-            dataKey="completed"
-            stroke="#10b981"
-            strokeWidth={3}
-          />
+            <Line
+              dataKey="completed"
+              stroke="#10b981"
+              strokeWidth={3}
+            />
 
-        </LineChart>
+          </LineChart>
 
-      </ResponsiveContainer>
+        </ResponsiveContainer>
+      ) : (
+        <div className="flex h-[260px] items-center justify-center text-sm text-gray-400">
+          Belum ada data mingguan dari task milik kamu.
+        </div>
+      )}
 
     </div>
   )

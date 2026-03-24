@@ -1,12 +1,8 @@
-export default function RecentActivity() {
+interface RecentActivityProps {
+  activities: string[]
+}
 
-  const activities = [
-    "Completed Fix mobile navigation bug",
-    "Completed Update pricing page copy",
-    "Started Implement dark mode",
-    "Started API rate limiting middleware",
-    "Created Write Q1 performance report"
-  ]
+export default function RecentActivity({ activities }: RecentActivityProps) {
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
@@ -17,11 +13,17 @@ export default function RecentActivity() {
 
       <div className="space-y-3">
 
-        {activities.map((item, i) => (
-          <div key={i} className="text-sm text-gray-600">
-            {item}
+        {activities.length > 0 ? (
+          activities.map((item, i) => (
+            <div key={i} className="text-sm text-gray-600">
+              {item}
+            </div>
+          ))
+        ) : (
+          <div className="text-sm text-gray-400">
+            Belum ada aktivitas dari task milik kamu.
           </div>
-        ))}
+        )}
 
       </div>
 

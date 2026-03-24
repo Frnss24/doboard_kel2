@@ -57,11 +57,7 @@ function TaskCardBody({ task, isDragging = false, onClick, dragHandle }: TaskCar
   );
 }
 
-export default function TaskCard({ task, onClick, draggable = true }: TaskCardProps) {
-  if (!draggable) {
-    return <TaskCardBody task={task} />;
-  }
-
+function SortableTaskCard({ task, onClick }: { task: Task; onClick?: (task: Task) => void }) {
   const {
     attributes,
     listeners,
@@ -99,4 +95,12 @@ export default function TaskCard({ task, onClick, draggable = true }: TaskCardPr
       />
     </div>
   );
+}
+
+export default function TaskCard({ task, onClick, draggable = true }: TaskCardProps) {
+  if (!draggable) {
+    return <TaskCardBody task={task} />;
+  }
+
+  return <SortableTaskCard task={task} onClick={onClick} />;
 }

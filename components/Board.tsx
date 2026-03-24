@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useId, useEffect } from "react";
+import { useState, useCallback, useId } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -38,12 +38,6 @@ export default function Board() {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
   );
-
-  useEffect(() => {
-    if (!authLoading && !user) {
-      setModalOpen(false);
-    }
-  }, [authLoading, user]);
 
   const totalTasks = columns.reduce((sum, col) => sum + col.tasks.length, 0);
   const doneTasks = columns.find((c) => c.id === "done")?.tasks.length ?? 0;
@@ -246,19 +240,10 @@ export default function Board() {
     setTaskDetailOpen(true);
   };
 
-  const selectedColumn = selectedTask ? findColumn(selectedTask.id) : null;
-
-  useEffect(() => {
-    if (!taskDetailOpen || !selectedTask) return;
-
-    const latestTask = columns
-      .flatMap((column) => column.tasks)
-      .find((task) => task.id === selectedTask.id);
-
-    if (latestTask) {
-      setSelectedTask(latestTask);
-    }
-  }, [columns, selectedTask, taskDetailOpen]);
+  const selectedTaskView = selectedTask
+    ? columns.flatMap((column) => column.tasks).find((task) => task.id === selectedTask.id) ?? selectedTask
+    : null;
+  const selectedColumn = selectedTaskView ? findColumn(selectedTaskView.id) : null;
 
   const handleUpdateTask = useCallback(
     async (task: {
@@ -366,15 +351,15 @@ export default function Board() {
 
       {/* Modal */}
       <AddTaskModal
-        isOpen={modalOpen}
+        isOpen={modalOpen && !!user}
         onClose={() => setModalOpen(false)}
         onAdd={handleAddTask}
         columnId={modalColumnId}
       />
 
       <TaskDetailModal
-        isOpen={taskDetailOpen}
-        task={selectedTask}
+        isOpen={taskDetailOpen && !!selectedTaskView}
+        task={selectedTaskView}
         columnLabel={selectedColumn?.title}
         onClose={() => setTaskDetailOpen(false)}
         onSave={handleUpdateTask}

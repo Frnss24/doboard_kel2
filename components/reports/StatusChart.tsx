@@ -8,7 +8,16 @@ import {
   ResponsiveContainer
 } from "recharts"
 
-export default function StatusChart({ data }: any) {
+interface StatusItem {
+  name: string
+  value: number
+}
+
+interface StatusChartProps {
+  data: StatusItem[]
+}
+
+export default function StatusChart({ data }: StatusChartProps) {
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
