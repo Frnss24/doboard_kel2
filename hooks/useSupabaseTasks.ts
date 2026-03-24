@@ -125,6 +125,7 @@ function toTask(row: DbTask): Task {
     description: row.description,
     priority: row.priority,
     dueDate: formatDate(row.due_date),
+    dueDateRaw: row.due_date ?? "",
     assignee: { name: row.assignee_name, avatar: row.assignee_avatar },
   };
 }
@@ -284,5 +285,63 @@ export function useSupabaseTasks() {
     [user]
   );
 
-  return { columns, setColumns, loading, addTask, moveTask, reorderTasks, refetch: fetchData };
+  const updateTask = useCallback(
+    async (
+      taskId: string,
+      updates: {
+        title: string;
+        description: string;
+        priority: Priority;
+        dueDate: string;
+        assigneeName: string;
+      }
+    ) => {
+      if (!user) {
+        logSupabaseError("Update error", { message: "User must be logged in" });
+        return;
+      }
+
+      const cleanAssignee = updates.assigneeName.trim() || "Unassigned";
+
+      const { data, error } = await supabase
+        .from("tasks")
+        .update({
+          title: updates.title.trim(),
+          description: updates.description,
+          priority: updates.priority,
+          due_date: updates.dueDate || null,
+          assignee_name: cleanAssignee,
+          assignee_avatar: cleanAssignee[0].toUpperCase(),
+        })
+        .eq("id", taskId)
+        .eq("user_id", user.id)
+        .select()
+        .single();
+
+      if (error) {
+        logSupabaseError("Update error", error);
+        return;
+      }
+
+      const updatedTask = toTask(data as DbTask);
+      setColumns((prev) =>
+        prev.map((column) => ({
+          ...column,
+          tasks: column.tasks.map((task) => (task.id === taskId ? updatedTask : task)),
+        }))
+      );
+    },
+    [user]
+  );
+
+  return {
+    columns,
+    setColumns,
+    loading,
+    addTask,
+    moveTask,
+    reorderTasks,
+    updateTask,
+    refetch: fetchData,
+  };
 }

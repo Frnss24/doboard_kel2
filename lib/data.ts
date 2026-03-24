@@ -6,6 +6,7 @@ export interface Task {
   description: string;
   priority: Priority;
   dueDate: string;
+  dueDateRaw?: string;
   assignee: {
     name: string;
     avatar: string;
