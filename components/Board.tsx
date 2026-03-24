@@ -17,19 +17,22 @@ import { useRouter } from "next/navigation";
 import Column from "./Column";
 import TaskCard from "./TaskCard";
 import AddTaskModal from "./AddTaskModal";
+import TaskDetailModal from "./TaskDetailModal";
 import { Task, Priority } from "@/lib/data";
 import { useSupabaseTasks } from "@/hooks/useSupabaseTasks";
 import { useSupabaseAuth } from "@/hooks/useSupabaseAuth";
 
 export default function Board() {
   const router = useRouter();
-  const { columns, setColumns, loading, addTask, reorderTasks } = useSupabaseTasks();
+  const { columns, setColumns, loading, addTask, reorderTasks, updateTask } = useSupabaseTasks();
   const { user, loading: authLoading } = useSupabaseAuth();
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   const [activeColumnId, setActiveColumnId] = useState<string | null>(null);
   const [authNotice, setAuthNotice] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [modalColumnId, setModalColumnId] = useState("todo");
+  const [taskDetailOpen, setTaskDetailOpen] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
 
   const dndId = useId();
   const sensors = useSensors(
@@ -238,6 +241,41 @@ export default function Board() {
     setModalOpen(true);
   };
 
+  const openTaskDetail = (task: Task) => {
+    setSelectedTask(task);
+    setTaskDetailOpen(true);
+  };
+
+  const selectedColumn = selectedTask ? findColumn(selectedTask.id) : null;
+
+  useEffect(() => {
+    if (!taskDetailOpen || !selectedTask) return;
+
+    const latestTask = columns
+      .flatMap((column) => column.tasks)
+      .find((task) => task.id === selectedTask.id);
+
+    if (latestTask) {
+      setSelectedTask(latestTask);
+    }
+  }, [columns, selectedTask, taskDetailOpen]);
+
+  const handleUpdateTask = useCallback(
+    async (task: {
+      title: string;
+      description: string;
+      priority: Priority;
+      dueDate: string;
+      assigneeName: string;
+    }) => {
+      if (!selectedTask) return;
+
+      await updateTask(selectedTask.id, task);
+      setTaskDetailOpen(false);
+    },
+    [selectedTask, updateTask]
+  );
+
   return (
     <div className="flex min-h-[calc(100vh-57px)] flex-col bg-gray-50">
       {/* Page Header */}
@@ -304,12 +342,17 @@ export default function Board() {
         >
           <div className="flex gap-6">
             {columns.map((column) => (
-              <Column key={column.id} column={column} onAddTask={openModal} />
+              <Column
+                key={column.id}
+                column={column}
+                onAddTask={openModal}
+                onTaskClick={openTaskDetail}
+              />
             ))}
           </div>
 
           <DragOverlay>
-            {activeTask ? <TaskCard task={activeTask} /> : null}
+            {activeTask ? <TaskCard task={activeTask} draggable={false} /> : null}
           </DragOverlay>
         </DndContext>
       </div>
@@ -327,6 +370,14 @@ export default function Board() {
         onClose={() => setModalOpen(false)}
         onAdd={handleAddTask}
         columnId={modalColumnId}
+      />
+
+      <TaskDetailModal
+        isOpen={taskDetailOpen}
+        task={selectedTask}
+        columnLabel={selectedColumn?.title}
+        onClose={() => setTaskDetailOpen(false)}
+        onSave={handleUpdateTask}
       />
     </div>
   );

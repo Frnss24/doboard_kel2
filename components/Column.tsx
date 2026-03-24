@@ -6,14 +6,15 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import TaskCard from "./TaskCard";
-import { ColumnData } from "@/lib/data";
+import { ColumnData, Task } from "@/lib/data";
 
 interface ColumnProps {
   column: ColumnData;
   onAddTask: (columnId: string) => void;
+  onTaskClick: (task: Task) => void;
 }
 
-export default function Column({ column, onAddTask }: ColumnProps) {
+export default function Column({ column, onAddTask, onTaskClick }: ColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id: column.id });
 
   return (
@@ -51,7 +52,9 @@ export default function Column({ column, onAddTask }: ColumnProps) {
           strategy={verticalListSortingStrategy}
         >
           {column.tasks.length > 0 ? (
-            column.tasks.map((task) => <TaskCard key={task.id} task={task} />)
+            column.tasks.map((task) => (
+              <TaskCard key={task.id} task={task} onClick={onTaskClick} />
+            ))
           ) : (
             <button
               onClick={() => onAddTask(column.id)}

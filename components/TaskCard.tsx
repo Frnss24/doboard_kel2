@@ -1,5 +1,6 @@
 "use client";
 
+import { ReactNode } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Task } from "@/lib/data";
@@ -12,37 +13,30 @@ const priorityStyles: Record<string, string> = {
 
 interface TaskCardProps {
   task: Task;
+  onClick?: (task: Task) => void;
+  draggable?: boolean;
 }
 
-export default function TaskCard({ task }: TaskCardProps) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: task.id });
+interface TaskCardBodyProps {
+  task: Task;
+  isDragging?: boolean;
+  onClick?: (task: Task) => void;
+  dragHandle?: ReactNode;
+}
 
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
-
+function TaskCardBody({ task, isDragging = false, onClick, dragHandle }: TaskCardBodyProps) {
   return (
     <div
-      ref={setNodeRef}
-      style={style}
-      {...attributes}
-      {...listeners}
-      className={`cursor-grab rounded-xl border border-gray-100 bg-white p-4 shadow-sm transition-shadow hover:shadow-md active:cursor-grabbing ${
-        isDragging ? "opacity-50 shadow-lg" : ""
-      }`}
+      onClick={() => onClick?.(task)}
+      className={`rounded-xl border border-gray-100 bg-white p-4 shadow-sm transition-shadow hover:shadow-md ${
+        onClick ? "cursor-pointer" : ""
+      } ${isDragging ? "opacity-50 shadow-lg" : ""}`}
     >
-      <h3 className="text-sm font-semibold text-gray-900">{task.title}</h3>
-      <p className="mt-1 text-xs leading-relaxed text-gray-500">
-        {task.description}
-      </p>
+      <div className="flex items-start justify-between gap-2">
+        <h3 className="text-sm font-semibold text-gray-900">{task.title}</h3>
+        {dragHandle}
+      </div>
+      <p className="mt-1 text-xs leading-relaxed text-gray-500">{task.description}</p>
 
       <div className="mt-3 flex items-center justify-between">
         <span
@@ -59,6 +53,50 @@ export default function TaskCard({ task }: TaskCardProps) {
         </div>
         <span className="text-xs text-gray-500">{task.assignee.name}</span>
       </div>
+    </div>
+  );
+}
+
+export default function TaskCard({ task, onClick, draggable = true }: TaskCardProps) {
+  if (!draggable) {
+    return <TaskCardBody task={task} />;
+  }
+
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: task.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      <TaskCardBody
+        task={task}
+        isDragging={isDragging}
+        onClick={onClick}
+        dragHandle={
+          <button
+            type="button"
+            {...attributes}
+            {...listeners}
+            onClick={(event) => event.stopPropagation()}
+            className="cursor-grab rounded-md p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 active:cursor-grabbing"
+            aria-label="Drag task"
+          >
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 12h16M4 16h16" />
+            </svg>
+          </button>
+        }
+      />
     </div>
   );
 }
