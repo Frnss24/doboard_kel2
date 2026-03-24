@@ -89,7 +89,7 @@ export default function LoginPage() {
   return (
     <main className="flex min-h-[calc(100vh-57px)] items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-cyan-50 px-6 py-12">
       <div className="w-full max-w-md rounded-3xl border border-white/70 bg-white/90 p-8 shadow-xl backdrop-blur-sm">
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-700">KanbanFlow Auth</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-700">DoBOARD Auth</p>
         <h1 className="mt-2 text-2xl font-bold text-slate-900">
           {mode === "signin" ? "Masuk ke akun kamu" : "Buat akun baru"}
         </h1>

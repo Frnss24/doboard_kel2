@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "KanbanFlow - Project Management",
-  description: "A clean and minimal Kanban board for managing your projects",
+  title: "DoBOARD - Project Management",
+  description: "A clean and minimal DoBOARD workspace for managing your projects",
 };
 
 export default function RootLayout({

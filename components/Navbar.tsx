@@ -46,7 +46,7 @@ export default function Navbar() {
               />
             </svg>
           </div>
-          <span className="text-lg font-bold text-gray-900">KanbanFlow</span>
+          <span className="text-lg font-bold text-gray-900">DoBOARD</span>
         </div>
 
         {/* Navigation */}
