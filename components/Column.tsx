@@ -12,13 +12,21 @@ interface ColumnProps {
   column: ColumnData;
   onAddTask: (columnId: string) => void;
   onTaskClick: (task: Task) => void;
+  disableDrag?: boolean;
+  emptyMessage?: string;
 }
 
-export default function Column({ column, onAddTask, onTaskClick }: ColumnProps) {
+export default function Column({
+  column,
+  onAddTask,
+  onTaskClick,
+  disableDrag = false,
+  emptyMessage = "No tasks yet",
+}: ColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id: column.id });
 
   return (
-    <div className="flex min-w-[320px] flex-1 flex-col">
+    <div className="animate-fade-up flex min-w-[300px] flex-1 flex-col">
       {/* Column Header */}
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -43,8 +51,8 @@ export default function Column({ column, onAddTask, onTaskClick }: ColumnProps) 
       {/* Cards Container */}
       <div
         ref={setNodeRef}
-        className={`flex flex-1 flex-col gap-3 rounded-2xl bg-gray-50/80 p-3 transition-colors ${
-          isOver ? "bg-blue-50/60 ring-2 ring-blue-200" : ""
+        className={`flex flex-1 flex-col gap-3 rounded-2xl border border-gray-200/70 bg-white/70 p-3 shadow-sm backdrop-blur-sm transition ${
+          isOver && !disableDrag ? "bg-blue-50/60 ring-2 ring-blue-200" : ""
         }`}
       >
         <SortableContext
@@ -53,7 +61,7 @@ export default function Column({ column, onAddTask, onTaskClick }: ColumnProps) 
         >
           {column.tasks.length > 0 ? (
             column.tasks.map((task) => (
-              <TaskCard key={task.id} task={task} onClick={onTaskClick} />
+              <TaskCard key={task.id} task={task} onClick={onTaskClick} draggable={!disableDrag} />
             ))
           ) : (
             <button
@@ -65,7 +73,7 @@ export default function Column({ column, onAddTask, onTaskClick }: ColumnProps) 
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                 </svg>
               </div>
-              <span className="text-sm">No tasks yet</span>
+              <span className="text-sm">{emptyMessage}</span>
               <span className="text-xs font-medium text-blue-500">Add a task</span>
             </button>
           )}

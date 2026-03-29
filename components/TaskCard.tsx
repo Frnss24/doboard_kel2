@@ -28,9 +28,9 @@ function TaskCardBody({ task, isDragging = false, onClick, dragHandle }: TaskCar
   return (
     <div
       onClick={() => onClick?.(task)}
-      className={`rounded-xl border border-gray-100 bg-white p-4 shadow-sm transition-shadow hover:shadow-md ${
+      className={`rounded-xl border border-gray-100 bg-white p-4 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-md ${
         onClick ? "cursor-pointer" : ""
-      } ${isDragging ? "opacity-50 shadow-lg" : ""}`}
+      } ${isDragging ? "scale-[1.01] opacity-70 shadow-lg" : ""}`}
     >
       <div className="flex items-start justify-between gap-2">
         <h3 className="text-sm font-semibold text-gray-900">{task.title}</h3>
