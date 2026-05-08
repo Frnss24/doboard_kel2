@@ -133,33 +133,33 @@ export function useSupabaseTasks() {
   );
   const [loading, setLoading] = useState(true);
   const [board, setBoard] = useState<Board | null>(null);
+  const [boards, setBoards] = useState<Board[]>([]);
+  const [activeBoardId, setActiveBoardId] = useState<string | null>(null);
 
-  // Fetch the user's default board
-  const fetchBoard = useCallback(async (): Promise<Board | null> => {
-    if (!user) return null;
+  // Fetch all user boards
+  const fetchBoards = useCallback(async (): Promise<Board[]> => {
+    if (!user) return [];
 
     const { data, error } = await supabase
       .from("boards")
       .select("*")
       .eq("owner_id", user.id)
-      .order("created_at", { ascending: true })
-      .limit(1)
-      .maybeSingle();
+      .is("deleted_at", null)
+      .order("created_at", { ascending: true });
 
     if (error) {
-      logSupabaseError("Fetch board error", error);
-      return null;
+      logSupabaseError("Fetch boards error", error);
+      return [];
     }
 
-    if (!data) return null;
+    if (!data) return [];
 
-    const dbBoard = data as DbBoard;
-    return {
+    return (data as DbBoard[]).map(dbBoard => ({
       id: dbBoard.id,
       name: dbBoard.name,
       description: dbBoard.description ?? "",
       ownerId: dbBoard.owner_id,
-    };
+    }));
   }, [user]);
 
   // Fetch all tasks for the active board
@@ -172,15 +172,29 @@ export function useSupabaseTasks() {
       if (!user) {
         setColumns(COLUMNS_CONFIG.map((c) => ({ ...c, tasks: [] })));
         setBoard(null);
+        setBoards([]);
         return;
       }
 
-      // Get the board first
-      const activeBoard = await fetchBoard();
-      if (!activeBoard) {
+      // Get all boards first
+      const allBoards = await fetchBoards();
+      setBoards(allBoards);
+
+      if (allBoards.length === 0) {
         setColumns(COLUMNS_CONFIG.map((c) => ({ ...c, tasks: [] })));
+        setBoard(null);
         return;
       }
+
+      // Determine active board
+      let currentActiveId = localStorage.getItem("activeBoardId");
+      if (!currentActiveId || !allBoards.find(b => b.id === currentActiveId)) {
+        currentActiveId = allBoards[0].id;
+        localStorage.setItem("activeBoardId", currentActiveId);
+      }
+      
+      setActiveBoardId(currentActiveId);
+      const activeBoard = allBoards.find(b => b.id === currentActiveId) || allBoards[0];
       setBoard(activeBoard);
 
       // Fetch tasks for this board
@@ -231,11 +245,43 @@ export function useSupabaseTasks() {
     } finally {
       setLoading(false);
     }
-  }, [authLoading, user, fetchBoard]);
+  }, [authLoading, user, fetchBoards]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  const switchBoard = (boardId: string) => {
+    localStorage.setItem("activeBoardId", boardId);
+    setActiveBoardId(boardId);
+    fetchData(); // Refetch data for new board
+  };
+
+  const createBoard = async (name: string, description: string) => {
+    if (!user) return false;
+
+    const { data, error } = await supabase
+      .from("boards")
+      .insert({
+        name,
+        description,
+        owner_id: user.id,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      logSupabaseError("Create board error", error);
+      return false;
+    }
+
+    if (data) {
+      switchBoard(data.id);
+      return true;
+    }
+
+    return false;
+  };
 
   const addTask = useCallback(
     async (
@@ -400,11 +446,15 @@ export function useSupabaseTasks() {
     setColumns,
     loading,
     board,
+    boards,
+    activeBoardId,
+    switchBoard,
+    createBoard,
     addTask,
-    moveTask,
     reorderTasks,
     updateTask,
     deleteTask,
+    moveTask,
     refetch: fetchData,
   };
 }

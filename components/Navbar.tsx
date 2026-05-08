@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 import { useSupabaseAuth } from "@/hooks/useSupabaseAuth";
+import { supabase } from "@/lib/supabase";
 
 const navItems = [
   { label: "Board", href: "/" },
@@ -13,6 +15,23 @@ const navItems = [
 export default function Navbar() {
   const pathname = usePathname();
   const { user, loading, signOut } = useSupabaseAuth();
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    if (!user) {
+      setIsAdmin(false);
+      return;
+    }
+    const checkAdmin = async () => {
+      const { data } = await supabase
+        .from("users")
+        .select("role")
+        .eq("id", user.id)
+        .maybeSingle();
+      setIsAdmin(data?.role === "admin");
+    };
+    checkAdmin();
+  }, [user]);
 
   const handleSignOut = async () => {
     try {
@@ -25,34 +44,29 @@ export default function Navbar() {
   const userLabel = user?.user_metadata?.full_name || user?.email || "User";
   const userAvatar = userLabel.slice(0, 1).toUpperCase();
 
+  const allNavItems = [
+    ...navItems,
+    ...(isAdmin ? [{ label: "Admin", href: "/admin" }] : []),
+  ];
+
+  if (pathname.startsWith("/admin")) {
+    return null;
+  }
+
   return (
     <nav className="flex items-center justify-between border-b border-gray-200 bg-white px-6 py-3">
       {/* Left section */}
       <div className="flex items-center gap-8">
         {/* Logo */}
         <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600">
-            <svg
-              className="h-4 w-4 text-white"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"
-              />
-            </svg>
-          </div>
+          <img src="/logo.png" alt="DoBOARD" className="h-8 w-8 object-contain" />
           <span className="text-lg font-bold text-gray-900">DoBOARD</span>
         </div>
 
         {/* Navigation */}
         <div className="flex items-center gap-1">
-          {navItems.map((item) => {
-            const isActive = pathname === item.href;
+          {allNavItems.map((item) => {
+            const isActive = pathname === item.href || (item.href === "/admin" && pathname.startsWith("/admin"));
             return (
               <Link
                 key={item.label}

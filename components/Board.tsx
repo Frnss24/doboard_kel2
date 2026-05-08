@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useId, useMemo } from "react";
+import { useState, useCallback, useId, useMemo, useRef, useEffect } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -24,7 +24,10 @@ import { useSupabaseAuth } from "@/hooks/useSupabaseAuth";
 
 export default function Board() {
   const router = useRouter();
-  const { columns, setColumns, loading, addTask, reorderTasks, updateTask, deleteTask } = useSupabaseTasks();
+  const { 
+    columns, setColumns, loading, board, boards, activeBoardId, 
+    switchBoard, createBoard, addTask, reorderTasks, updateTask, deleteTask 
+  } = useSupabaseTasks();
   const { user, loading: authLoading } = useSupabaseAuth();
 
   const [viewMode, setViewMode] = useState<"kanban" | "list">("kanban");
@@ -37,6 +40,23 @@ export default function Board() {
   const [modalColumnId, setModalColumnId] = useState<TaskStatus>("todo");
   const [taskDetailOpen, setTaskDetailOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [isBoardDropdownOpen, setBoardDropdownOpen] = useState(false);
+  const [createBoardOpen, setCreateBoardOpen] = useState(false);
+  const [newBoardName, setNewBoardName] = useState("");
+  const [newBoardDescription, setNewBoardDescription] = useState("");
+  const [creatingBoard, setCreatingBoard] = useState(false);
+  const [createBoardError, setCreateBoardError] = useState<string | null>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setBoardDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const dndId = useId();
   const sensors = useSensors(
@@ -309,12 +329,162 @@ export default function Board() {
     [deleteTask]
   );
 
+  const handleCreateBoard = async (event: React.FormEvent) => {
+    event.preventDefault();
+
+    const name = newBoardName.trim();
+    if (!name) {
+      setCreateBoardError("Board name is required.");
+      return;
+    }
+
+    setCreatingBoard(true);
+    setCreateBoardError(null);
+
+    const created = await createBoard(name, newBoardDescription.trim() || "User created board");
+
+    setCreatingBoard(false);
+
+    if (!created) {
+      setCreateBoardError("Failed to create board. Please try again.");
+      return;
+    }
+
+    setNewBoardName("");
+    setNewBoardDescription("");
+    setCreateBoardOpen(false);
+  };
+
   return (
-    <div className="flex min-h-[calc(100vh-57px)] flex-col bg-[radial-gradient(circle_at_top_right,_#dbeafe,_#f8fafc_42%,_#f8fafc)]">
+    <div className="flex min-h-[calc(100vh-57px)] flex-col bg-gradient-to-br from-slate-50 via-blue-50 to-cyan-50">
       <div className="border-b border-gray-200/80 bg-white/90 px-4 py-4 backdrop-blur-sm md:px-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h1 className="text-xl font-bold tracking-tight text-gray-900">DoBOARD</h1>
+            <div className="flex items-center gap-3">
+              {boards && boards.length > 0 ? (
+                <div className="relative" ref={dropdownRef}>
+                  <button
+                    onClick={() => setBoardDropdownOpen(!isBoardDropdownOpen)}
+                    className="group flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
+                  >
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-slate-900 via-slate-800 to-blue-700 text-sm font-bold text-white shadow-sm">
+                      {(board?.name?.slice(0, 1) || "D").toUpperCase()}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                        Workspace
+                      </p>
+                      <div className="mt-0.5 flex items-center gap-2">
+                        <span className="truncate text-xl font-bold tracking-tight text-slate-900">
+                          {board ? board.name : "DoBOARD"}
+                        </span>
+                        <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">
+                          {boards.length}
+                        </span>
+                      </div>
+                    </div>
+                    <svg
+                      className={`h-5 w-5 shrink-0 text-slate-400 transition-transform duration-200 ${isBoardDropdownOpen ? "rotate-180" : ""}`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.25} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+
+                  {isBoardDropdownOpen && (
+                    <div className="absolute left-0 top-full z-50 mt-3 w-[22rem] overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.16)]">
+                      <div className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-blue-50/60 px-4 py-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                              Your Boards
+                            </p>
+                            <p className="mt-1 text-sm text-slate-500">
+                              Switch workspace or create a new one.
+                            </p>
+                          </div>
+                          <div className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-500 shadow-sm ring-1 ring-slate-200">
+                            {boards.length}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="max-h-72 overflow-y-auto p-2">
+                        {boards.map((b) => {
+                          const isActive = activeBoardId === b.id;
+
+                          return (
+                            <button
+                              key={b.id}
+                              onClick={() => {
+                                switchBoard(b.id);
+                                setBoardDropdownOpen(false);
+                              }}
+                              className={`group flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition-all ${isActive ? "bg-blue-50 text-blue-700" : "hover:bg-slate-50"}`}
+                            >
+                              <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-sm font-bold ${isActive ? "bg-blue-600 text-white shadow-sm" : "bg-slate-100 text-slate-700"}`}>
+                                {(b.name?.slice(0, 1) || "B").toUpperCase()}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="truncate text-sm font-semibold text-slate-900">
+                                    {b.name}
+                                  </span>
+                                  {isActive && (
+                                    <span className="rounded-full bg-white/80 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.16em] text-blue-700 ring-1 ring-blue-100">
+                                      Active
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="mt-0.5 truncate text-xs text-slate-500">
+                                  {b.description || "No description"}
+                                </p>
+                              </div>
+                              {isActive ? (
+                                <svg className="h-4 w-4 shrink-0 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                                </svg>
+                              ) : (
+                                <svg className="h-4 w-4 shrink-0 text-slate-300 opacity-0 transition-opacity group-hover:opacity-100" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+                                </svg>
+                              )}
+                            </button>
+                          );
+                        })}
+
+                        <div className="mt-2 border-t border-slate-100 px-2 pt-2">
+                          <button
+                            onClick={() => {
+                              setBoardDropdownOpen(false);
+                              setCreateBoardError(null);
+                              setCreateBoardOpen(true);
+                            }}
+                            className="flex w-full items-center gap-3 rounded-2xl border border-dashed border-blue-200 bg-blue-50/60 px-3 py-3 text-left text-sm font-semibold text-blue-700 transition-all hover:border-blue-300 hover:bg-blue-50"
+                          >
+                            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white text-blue-600 shadow-sm ring-1 ring-blue-100">
+                              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+                              </svg>
+                            </span>
+                            <span className="flex-1">Create New Board</span>
+                            <svg className="h-4 w-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <h1 className="text-xl font-bold tracking-tight text-gray-900">
+                  {board ? board.name : "DoBOARD"}
+                </h1>
+              )}
+            </div>
             <p className="mt-0.5 text-sm text-gray-500">
               {loading ? (
                 "Loading..."
@@ -556,6 +726,86 @@ export default function Board() {
           />
         </svg>
       </button>
+
+      {createBoardOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+          <div className="absolute inset-0 bg-slate-950/45 backdrop-blur-sm" onClick={() => setCreateBoardOpen(false)} />
+          <div className="relative w-full max-w-lg overflow-hidden rounded-3xl border border-white/70 bg-white shadow-[0_30px_100px_rgba(15,23,42,0.22)]">
+            <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-blue-500 via-cyan-400 to-indigo-500" />
+            <div className="border-b border-slate-100 bg-slate-50/80 px-6 py-5">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="mb-2 inline-flex rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600">
+                    Board
+                  </p>
+                  <h2 className="text-lg font-bold text-slate-900">Create New Board</h2>
+                  <p className="mt-1 text-sm leading-6 text-slate-500">
+                    Start a fresh workspace and give your team a clear direction.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setCreateBoardOpen(false)}
+                  className="flex h-9 w-9 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-white hover:text-slate-600"
+                >
+                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <form onSubmit={handleCreateBoard} className="space-y-4 px-6 py-6">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Board name</label>
+                <input
+                  type="text"
+                  value={newBoardName}
+                  onChange={(event) => setNewBoardName(event.target.value)}
+                  placeholder="e.g. Product Launch"
+                  autoFocus
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-blue-300 focus:bg-white focus:ring-4 focus:ring-blue-100"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Description</label>
+                <textarea
+                  value={newBoardDescription}
+                  onChange={(event) => setNewBoardDescription(event.target.value)}
+                  placeholder="Optional board description"
+                  rows={4}
+                  className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-blue-300 focus:bg-white focus:ring-4 focus:ring-blue-100"
+                />
+              </div>
+
+              {createBoardError && (
+                <p className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm text-rose-700">
+                  {createBoardError}
+                </p>
+              )}
+
+              <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:items-center">
+                <button
+                  type="button"
+                  onClick={() => setCreateBoardOpen(false)}
+                  className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={creatingBoard}
+                  className="flex-1 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {creatingBoard ? "Creating..." : "Create Board"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       <AddTaskModal
         isOpen={modalOpen && !!user}

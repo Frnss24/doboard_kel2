@@ -42,9 +42,24 @@ function LoginContent() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (!authLoading && user) {
-      router.replace(nextPath);
-    }
+    if (authLoading || !user) return;
+
+    // Check if user is admin
+    const checkAndRedirect = async () => {
+      const { data } = await supabase
+        .from("users")
+        .select("role")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (data?.role === "admin" && nextPath === "/") {
+        router.replace("/admin");
+      } else {
+        router.replace(nextPath);
+      }
+    };
+
+    checkAndRedirect();
   }, [authLoading, user, router, nextPath]);
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
@@ -92,6 +107,22 @@ function LoginContent() {
       setErrorMessage(error.message);
       setSubmitting(false);
       return;
+    }
+
+    // Check if admin and redirect accordingly
+    const { data: { user: loggedInUser } } = await supabase.auth.getUser();
+    if (loggedInUser) {
+      const { data: profile } = await supabase
+        .from("users")
+        .select("role")
+        .eq("id", loggedInUser.id)
+        .maybeSingle();
+
+      if (profile?.role === "admin" && nextPath === "/") {
+        router.replace("/admin");
+        setSubmitting(false);
+        return;
+      }
     }
 
     router.replace(nextPath);

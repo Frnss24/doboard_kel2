@@ -68,7 +68,7 @@ function buildRecentActivities(columns: { id: string; title: string; tasks: Task
 
 export default function ReportsPage() {
 
-  const { columns, loading } = useSupabaseTasks()
+  const { columns, loading, board } = useSupabaseTasks()
 
   const allTasks = columns.flatMap(col => col.tasks)
 
@@ -112,12 +112,12 @@ export default function ReportsPage() {
 
   return (
 
-    <div className="flex min-h-[calc(100vh-57px)] flex-col bg-gray-50">
+    <div className="flex min-h-[calc(100vh-57px)] flex-col bg-gradient-to-br from-slate-50 via-blue-50 to-cyan-50">
 
-      <div className="border-b border-gray-200 bg-white px-6 py-4">
+      <div className="border-b border-gray-200/80 bg-white/80 backdrop-blur-sm px-6 py-4">
 
         <h1 className="text-xl font-bold text-gray-900">
-          Reports
+          {board ? `${board.name} - Reports` : "Reports"}
         </h1>
 
         <p className="text-sm text-gray-500">

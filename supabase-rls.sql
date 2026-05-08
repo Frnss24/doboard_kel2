@@ -52,14 +52,28 @@ ALTER TABLE tasks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE reports ENABLE ROW LEVEL SECURITY;
 
 -- =============================================
+-- Helper: cek apakah user saat ini adalah admin
+-- SECURITY DEFINER supaya bypass RLS (hindari infinite recursion)
+-- =============================================
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS boolean AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.users
+    WHERE id = auth.uid() AND role = 'admin'
+  );
+$$ LANGUAGE sql SECURITY DEFINER STABLE;
+
+-- =============================================
 -- RLS: users
 -- =============================================
 -- User bisa baca profil sendiri
+DROP POLICY IF EXISTS "Users can read own profile" ON users;
 CREATE POLICY "Users can read own profile"
     ON users FOR SELECT
     USING (auth.uid() = id);
 
 -- User bisa update profil sendiri
+DROP POLICY IF EXISTS "Users can update own profile" ON users;
 CREATE POLICY "Users can update own profile"
     ON users FOR UPDATE
     USING (auth.uid() = id);
@@ -68,21 +82,25 @@ CREATE POLICY "Users can update own profile"
 -- RLS: boards
 -- =============================================
 -- User bisa lihat board miliknya (yang belum dihapus)
+DROP POLICY IF EXISTS "Users can read own boards" ON boards;
 CREATE POLICY "Users can read own boards"
     ON boards FOR SELECT
     USING (auth.uid() = owner_id AND deleted_at IS NULL);
 
 -- User bisa buat board baru
+DROP POLICY IF EXISTS "Users can create boards" ON boards;
 CREATE POLICY "Users can create boards"
     ON boards FOR INSERT
     WITH CHECK (auth.uid() = owner_id);
 
 -- User bisa update board miliknya
+DROP POLICY IF EXISTS "Users can update own boards" ON boards;
 CREATE POLICY "Users can update own boards"
     ON boards FOR UPDATE
     USING (auth.uid() = owner_id);
 
 -- User bisa hapus board miliknya
+DROP POLICY IF EXISTS "Users can delete own boards" ON boards;
 CREATE POLICY "Users can delete own boards"
     ON boards FOR DELETE
     USING (auth.uid() = owner_id);
@@ -91,6 +109,7 @@ CREATE POLICY "Users can delete own boards"
 -- RLS: tasks
 -- =============================================
 -- User bisa lihat task di board miliknya
+DROP POLICY IF EXISTS "Users can read tasks in own boards" ON tasks;
 CREATE POLICY "Users can read tasks in own boards"
     ON tasks FOR SELECT
     USING (
@@ -101,6 +120,7 @@ CREATE POLICY "Users can read tasks in own boards"
     );
 
 -- User bisa buat task di board miliknya
+DROP POLICY IF EXISTS "Users can create tasks in own boards" ON tasks;
 CREATE POLICY "Users can create tasks in own boards"
     ON tasks FOR INSERT
     WITH CHECK (
@@ -110,6 +130,7 @@ CREATE POLICY "Users can create tasks in own boards"
     );
 
 -- User bisa update task di board miliknya
+DROP POLICY IF EXISTS "Users can update tasks in own boards" ON tasks;
 CREATE POLICY "Users can update tasks in own boards"
     ON tasks FOR UPDATE
     USING (
@@ -119,6 +140,7 @@ CREATE POLICY "Users can update tasks in own boards"
     );
 
 -- User bisa hapus task di board miliknya
+DROP POLICY IF EXISTS "Users can delete tasks in own boards" ON tasks;
 CREATE POLICY "Users can delete tasks in own boards"
     ON tasks FOR DELETE
     USING (
@@ -131,23 +153,64 @@ CREATE POLICY "Users can delete tasks in own boards"
 -- RLS: reports
 -- =============================================
 -- User bisa lihat report yang dia buat
+DROP POLICY IF EXISTS "Users can read own reports" ON reports;
 CREATE POLICY "Users can read own reports"
     ON reports FOR SELECT
     USING (auth.uid() = reporter_id);
 
 -- User bisa buat report baru
+DROP POLICY IF EXISTS "Users can create reports" ON reports;
 CREATE POLICY "Users can create reports"
     ON reports FOR INSERT
     WITH CHECK (auth.uid() = reporter_id);
 
 -- User bisa update report sendiri
+DROP POLICY IF EXISTS "Users can update own reports" ON reports;
 CREATE POLICY "Users can update own reports"
     ON reports FOR UPDATE
     USING (auth.uid() = reporter_id);
 
 -- Admin bisa lihat semua report
+DROP POLICY IF EXISTS "Admins can read all reports" ON reports;
 CREATE POLICY "Admins can read all reports"
     ON reports FOR SELECT
-    USING (
-        EXISTS (SELECT 1 FROM users WHERE id = auth.uid() AND role = 'admin')
-    );
+    USING (public.is_admin());
+
+-- Admin bisa update semua report (decision_note, status)
+DROP POLICY IF EXISTS "Admins can update all reports" ON reports;
+CREATE POLICY "Admins can update all reports"
+    ON reports FOR UPDATE
+    USING (public.is_admin());
+
+-- =============================================
+-- RLS: Admin — akses ke semua data
+-- =============================================
+-- Admin bisa lihat semua users
+DROP POLICY IF EXISTS "Admins can read all users" ON users;
+CREATE POLICY "Admins can read all users"
+    ON users FOR SELECT
+    USING (public.is_admin());
+
+-- Admin bisa update semua users (ganti role, dll)
+DROP POLICY IF EXISTS "Admins can update all users" ON users;
+CREATE POLICY "Admins can update all users"
+    ON users FOR UPDATE
+    USING (public.is_admin());
+
+-- Admin bisa delete users
+DROP POLICY IF EXISTS "Admins can delete users" ON users;
+CREATE POLICY "Admins can delete users"
+    ON users FOR DELETE
+    USING (public.is_admin());
+
+-- Admin bisa lihat semua boards (untuk stats)
+DROP POLICY IF EXISTS "Admins can read all boards" ON boards;
+CREATE POLICY "Admins can read all boards"
+    ON boards FOR SELECT
+    USING (public.is_admin());
+
+-- Admin bisa lihat semua tasks (untuk stats)
+DROP POLICY IF EXISTS "Admins can read all tasks" ON tasks;
+CREATE POLICY "Admins can read all tasks"
+    ON tasks FOR SELECT
+    USING (public.is_admin());

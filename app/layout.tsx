@@ -14,8 +14,11 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "DoBOARD - Project Management",
+  title: "DoBOARD",
   description: "A clean and minimal DoBOARD workspace for managing your projects",
+  icons: {
+    icon: "/logo.png",
+  },
 };
 
 export default function RootLayout({

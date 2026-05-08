@@ -18,7 +18,7 @@ function getDayOffset(dateStr: string) {
 }
 
 export default function TimelinePage() {
-  const { columns: initialColumns, loading } = useSupabaseTasks();
+  const { columns: initialColumns, loading, board } = useSupabaseTasks();
   const today = new Date();
   const todayOffset = Math.floor((today.getTime() - START_DATE.getTime()) / (1000 * 60 * 60 * 24)) * DAY_WIDTH;
 
@@ -29,9 +29,9 @@ export default function TimelinePage() {
   });
 
   return (
-    <div className="min-h-[calc(100vh-57px)] bg-gray-50 p-6">
+    <div className="min-h-[calc(100vh-57px)] bg-gradient-to-br from-slate-50 via-blue-50 to-cyan-50 p-6">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Timeline</h1>
+        <h1 className="text-2xl font-bold text-gray-900">{board ? `${board.name} - Timeline` : "Timeline"}</h1>
         <p className="text-sm text-gray-500 mt-1">Gantt view</p>
       </div>
 
@@ -47,7 +47,7 @@ export default function TimelinePage() {
         ))}
       </div>
 
-      <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-x-auto">
+      <div className="rounded-2xl border border-gray-200/80 bg-white/80 backdrop-blur-sm shadow-sm overflow-x-auto">
         <div style={{ minWidth: `${200 + DAYS * DAY_WIDTH}px` }}>
           <div className="flex border-b border-gray-100">
             <div className="w-48 shrink-0 px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide">Task</div>
@@ -62,7 +62,7 @@ export default function TimelinePage() {
 
           {initialColumns.map((col) => (
             <div key={col.id}>
-              <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 border-b border-gray-100">
+              <div className="flex items-center gap-2 px-4 py-2 bg-white/50 border-b border-gray-100">
                 <div className={`w-2 h-2 rounded-full ${col.dotColor}`} />
                 <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{col.title}</span>
               </div>
