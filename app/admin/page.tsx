@@ -240,7 +240,7 @@ export default function AdminDashboard() {
           <div className="flex items-baseline gap-2">
             <p className="text-4xl font-extrabold text-gray-900">{reports.length}</p>
           </div>
-          <p className="mt-1 text-sm font-medium text-gray-500">Reports Submitted</p>
+          <p className="mt-1 text-sm font-medium text-gray-500">Board reports submitted</p>
         </div>
       </div>
 
@@ -278,8 +278,8 @@ export default function AdminDashboard() {
       <div className="rounded-3xl border border-gray-200/80 bg-white/80 p-8 backdrop-blur-sm shadow-sm">
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-xl font-extrabold text-gray-900">Reports &amp; Moderation</h2>
-            <p className="text-sm font-medium text-gray-500">Manage user feedback and system alerts</p>
+            <h2 className="text-xl font-extrabold text-gray-900">Board Reports &amp; Moderation</h2>
+            <p className="text-sm font-medium text-gray-500">Review issues reported from active boards</p>
           </div>
           <div className="flex items-center gap-4 rounded-xl border border-gray-100 bg-white p-2 text-sm font-medium shadow-sm">
             <span className="flex items-center gap-2 px-2 text-gray-600">
@@ -307,7 +307,7 @@ export default function AdminDashboard() {
               </svg>
             </div>
             <p className="text-base font-semibold text-gray-900">All caught up!</p>
-            <p className="text-sm text-gray-500">No reports requiring moderation.</p>
+            <p className="text-sm text-gray-500">No board reports requiring moderation.</p>
           </div>
         ) : (
           <div className="overflow-x-auto">

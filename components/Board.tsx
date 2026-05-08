@@ -18,9 +18,11 @@ import Column from "./Column";
 import TaskCard from "./TaskCard";
 import AddTaskModal from "./AddTaskModal";
 import TaskDetailModal from "./TaskDetailModal";
+import ReportIssueModal, { ReportCategory } from "./ReportIssueModal";
 import { Task, Priority, TaskStatus } from "@/lib/data";
 import { useSupabaseTasks } from "@/hooks/useSupabaseTasks";
 import { useSupabaseAuth } from "@/hooks/useSupabaseAuth";
+import { supabase } from "@/lib/supabase";
 
 export default function Board() {
   const router = useRouter();
@@ -46,6 +48,9 @@ export default function Board() {
   const [newBoardDescription, setNewBoardDescription] = useState("");
   const [creatingBoard, setCreatingBoard] = useState(false);
   const [createBoardError, setCreateBoardError] = useState<string | null>(null);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportError, setReportError] = useState<string | null>(null);
+  const [reportSubmitting, setReportSubmitting] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -329,6 +334,37 @@ export default function Board() {
     [deleteTask]
   );
 
+  const handleSubmitReport = async (payload: {
+    category: ReportCategory;
+    title: string;
+    message: string;
+  }) => {
+    if (!user) {
+      setReportError("Kamu harus login dulu untuk mengirim report.");
+      return;
+    }
+
+    setReportSubmitting(true);
+    setReportError(null);
+
+    const { error } = await supabase.from("reports").insert({
+      reporter_id: user.id,
+      reporter_email: user.email,
+      title: payload.title,
+      message: `[${payload.category}] ${payload.message}`,
+      status: "open",
+    });
+
+    setReportSubmitting(false);
+
+    if (error) {
+      setReportError(error.message);
+      return;
+    }
+
+    setReportOpen(false);
+  };
+
   const handleCreateBoard = async (event: React.FormEvent) => {
     event.preventDefault();
 
@@ -359,10 +395,10 @@ export default function Board() {
     <div className="flex min-h-[calc(100vh-57px)] flex-col bg-gradient-to-br from-slate-50 via-blue-50 to-cyan-50">
       <div className="border-b border-gray-200/80 bg-white/90 px-4 py-4 backdrop-blur-sm md:px-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
+          <div className="flex flex-col gap-3">
             <div className="flex items-center gap-3">
               {boards && boards.length > 0 ? (
-                <div className="relative" ref={dropdownRef}>
+                <div className="flex w-full max-w-[22rem] flex-col" ref={dropdownRef}>
                   <button
                     onClick={() => setBoardDropdownOpen(!isBoardDropdownOpen)}
                     className="group flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
@@ -394,7 +430,7 @@ export default function Board() {
                   </button>
 
                   {isBoardDropdownOpen && (
-                    <div className="absolute left-0 top-full z-50 mt-3 w-[22rem] overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.16)]">
+                    <div className="mt-3 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.12)]">
                       <div className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-blue-50/60 px-4 py-4">
                         <div className="flex items-center justify-between gap-3">
                           <div>
@@ -716,15 +752,20 @@ export default function Board() {
         )}
       </div>
 
-      <button className="fixed bottom-6 right-6 flex h-12 w-12 items-center justify-center rounded-full bg-gray-800 text-white shadow-lg transition-all hover:-translate-y-0.5 hover:bg-gray-700">
+      <button
+        type="button"
+        onClick={() => setReportOpen(true)}
+        className="fixed bottom-6 right-6 flex items-center gap-2 rounded-full bg-rose-600 px-4 py-3 text-sm font-semibold text-white shadow-lg transition-all hover:-translate-y-0.5 hover:bg-rose-700"
+      >
         <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path
             strokeLinecap="round"
             strokeLinejoin="round"
             strokeWidth={2}
-            d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"
           />
         </svg>
+        Report
       </button>
 
       {createBoardOpen && (
@@ -821,6 +862,18 @@ export default function Board() {
         onClose={() => setTaskDetailOpen(false)}
         onSave={handleUpdateTask}
         onDelete={handleDeleteTask}
+      />
+
+      <ReportIssueModal
+        isOpen={reportOpen}
+        boardName={board?.name}
+        onClose={() => {
+          setReportOpen(false);
+          setReportError(null);
+        }}
+        onSubmit={handleSubmitReport}
+        submitting={reportSubmitting}
+        error={reportError}
       />
     </div>
   );
