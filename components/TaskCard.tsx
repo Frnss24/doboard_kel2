@@ -25,6 +25,10 @@ interface TaskCardBodyProps {
 }
 
 function TaskCardBody({ task, isDragging = false, onClick, dragHandle }: TaskCardBodyProps) {
+  const avatar = task.assigneeName !== "Unassigned"
+    ? task.assigneeName.slice(0, 1).toUpperCase()
+    : "?";
+
   return (
     <div
       onClick={() => onClick?.(task)}
@@ -49,9 +53,9 @@ function TaskCardBody({ task, isDragging = false, onClick, dragHandle }: TaskCar
 
       <div className="mt-3 flex items-center gap-2 border-t border-gray-50 pt-3">
         <div className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-blue-400 to-blue-600 text-[10px] font-bold text-white">
-          {task.assignee.avatar}
+          {avatar}
         </div>
-        <span className="text-xs text-gray-500">{task.assignee.name}</span>
+        <span className="text-xs text-gray-500">{task.assigneeName}</span>
       </div>
     </div>
   );

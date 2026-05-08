@@ -78,7 +78,7 @@ export default function ReportsPage() {
     columns.find(c => c.id === "done")?.tasks.length ?? 0
 
   const inProgress =
-    columns.find(c => c.id === "in-progress")?.tasks.length ?? 0
+    columns.find(c => c.id === "doing")?.tasks.length ?? 0
 
   const todo =
     columns.find(c => c.id === "todo")?.tasks.length ?? 0
@@ -103,7 +103,7 @@ export default function ReportsPage() {
 
   const statusData = [
     {name:"To Do",value:todo},
-    {name:"In Progress",value:inProgress},
+    {name:"Doing",value:inProgress},
     {name:"Done",value:done}
   ]
 

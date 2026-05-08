@@ -9,7 +9,7 @@ interface TimelineCardProps {
 
 const statusColors: Record<string, string> = {
   todo: "bg-blue-400",
-  "in-progress": "bg-orange-400",
+  doing: "bg-orange-400",
   done: "bg-green-500",
 };
 
@@ -26,7 +26,7 @@ export default function TimelineCard({ task, startOffset, width, columnId }: Tim
       style={{ left: `${startOffset}px`, width: `${width}px` }}
     >
       <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/30 text-[10px] font-bold text-white">
-        {task.assignee.avatar}
+        {task.assigneeName !== "Unassigned" ? task.assigneeName.slice(0, 1).toUpperCase() : "?"}
       </div>
       <span className="text-xs font-medium text-white truncate">
         {task.title}

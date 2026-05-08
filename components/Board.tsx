@@ -18,13 +18,13 @@ import Column from "./Column";
 import TaskCard from "./TaskCard";
 import AddTaskModal from "./AddTaskModal";
 import TaskDetailModal from "./TaskDetailModal";
-import { Task, Priority } from "@/lib/data";
+import { Task, Priority, TaskStatus } from "@/lib/data";
 import { useSupabaseTasks } from "@/hooks/useSupabaseTasks";
 import { useSupabaseAuth } from "@/hooks/useSupabaseAuth";
 
 export default function Board() {
   const router = useRouter();
-  const { columns, setColumns, loading, addTask, reorderTasks, updateTask } = useSupabaseTasks();
+  const { columns, setColumns, loading, addTask, reorderTasks, updateTask, deleteTask } = useSupabaseTasks();
   const { user, loading: authLoading } = useSupabaseAuth();
 
   const [viewMode, setViewMode] = useState<"kanban" | "list">("kanban");
@@ -34,7 +34,7 @@ export default function Board() {
   const [activeColumnId, setActiveColumnId] = useState<string | null>(null);
   const [authNotice, setAuthNotice] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
-  const [modalColumnId, setModalColumnId] = useState("todo");
+  const [modalColumnId, setModalColumnId] = useState<TaskStatus>("todo");
   const [taskDetailOpen, setTaskDetailOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
 
@@ -64,7 +64,7 @@ export default function Board() {
         const haystack = [
           task.title,
           task.description,
-          task.assignee.name,
+          task.assigneeName,
           task.priority,
           task.dueDate,
         ]
@@ -270,7 +270,7 @@ export default function Board() {
     }
 
     setAuthNotice(null);
-    setModalColumnId(columnId);
+    setModalColumnId(columnId as TaskStatus);
     setModalOpen(true);
   };
 
@@ -299,6 +299,14 @@ export default function Board() {
       setTaskDetailOpen(false);
     },
     [selectedTask, updateTask]
+  );
+
+  const handleDeleteTask = useCallback(
+    async (taskId: string) => {
+      await deleteTask(taskId);
+      setTaskDetailOpen(false);
+    },
+    [deleteTask]
   );
 
   return (
@@ -562,6 +570,7 @@ export default function Board() {
         columnLabel={selectedColumn?.title}
         onClose={() => setTaskDetailOpen(false)}
         onSave={handleUpdateTask}
+        onDelete={handleDeleteTask}
       />
     </div>
   );

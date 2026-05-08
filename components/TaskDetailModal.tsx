@@ -15,6 +15,7 @@ interface TaskDetailModalProps {
     dueDate: string;
     assigneeName: string;
   }) => Promise<void>;
+  onDelete?: (taskId: string) => Promise<void>;
 }
 
 export default function TaskDetailModal({
@@ -23,6 +24,7 @@ export default function TaskDetailModal({
   columnLabel,
   onClose,
   onSave,
+  onDelete,
 }: TaskDetailModalProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -38,7 +40,7 @@ export default function TaskDetailModal({
     setDescription(task.description);
     setPriority(task.priority);
     setDueDate(task.dueDateRaw ?? "");
-    setAssigneeName(task.assignee.name);
+    setAssigneeName(task.assigneeName);
   }, [task, isOpen]);
 
   if (!isOpen || !task) return null;
@@ -56,6 +58,17 @@ export default function TaskDetailModal({
         dueDate,
         assigneeName,
       });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!onDelete || !task || saving) return;
+    setSaving(true);
+    try {
+      await onDelete(task.id);
+      onClose();
     } finally {
       setSaving(false);
     }
@@ -141,21 +154,33 @@ export default function TaskDetailModal({
           </div>
 
           <div className="flex items-center gap-3 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 rounded-lg border border-gray-200 px-4 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
-              disabled={saving}
-            >
-              Close
-            </button>
-            <button
-              type="submit"
-              className="flex-1 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={saving}
-            >
-              {saving ? "Saving..." : "Save Changes"}
-            </button>
+            {onDelete && (
+              <button
+                type="button"
+                onClick={handleDelete}
+                className="rounded-lg border border-red-200 px-4 py-2.5 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={saving}
+              >
+                Delete
+              </button>
+            )}
+            <div className="flex flex-1 items-center gap-3">
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex-1 rounded-lg border border-gray-200 px-4 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+                disabled={saving}
+              >
+                Close
+              </button>
+              <button
+                type="submit"
+                className="flex-1 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={saving}
+              >
+                {saving ? "Saving..." : "Save Changes"}
+              </button>
+            </div>
           </div>
         </form>
       </div>

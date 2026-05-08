@@ -7,7 +7,7 @@ const START_DATE = new Date("2026-03-01");
 
 const statusColors: Record<string, string> = {
   todo: "bg-blue-400",
-  "in-progress": "bg-orange-400",
+  doing: "bg-orange-400",
   done: "bg-green-500",
 };
 
@@ -39,7 +39,7 @@ export default function TimelinePage() {
         <p className="text-sm text-gray-400">Loading tasks...</p>
       ) : (<>
       <div className="flex items-center gap-4 mb-4">
-        {[["todo","To Do"],["in-progress","In Progress"],["done","Done"]].map(([key, label]) => (
+        {[["todo","To Do"],["doing","Doing"],["done","Done"]].map(([key, label]) => (
           <div key={key} className="flex items-center gap-1.5">
             <div className={`w-2.5 h-2.5 rounded-full ${statusColors[key]}`} />
             <span className="text-xs text-gray-500">{label}</span>
@@ -71,7 +71,7 @@ export default function TimelinePage() {
                 <div key={task.id} className="flex border-b border-gray-50 hover:bg-gray-50/50">
                   <div className="w-48 shrink-0 px-4 py-3 flex items-center gap-2">
                     <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white ${statusColors[col.id]}`}>
-                      {task.assignee.avatar}
+                      {task.assigneeName !== "Unassigned" ? task.assigneeName.slice(0, 1).toUpperCase() : "?"}
                     </div>
                     <span className="text-xs text-gray-700 truncate">{task.title}</span>
                   </div>

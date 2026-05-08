@@ -2,34 +2,34 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
-import { ColumnData, Task, Priority } from "@/lib/data";
+import { ColumnData, Task, Priority, TaskStatus, Board, COLUMNS_CONFIG } from "@/lib/data";
 import { useSupabaseAuth } from "@/hooks/useSupabaseAuth";
-
-const COLUMN_META: Record<string, { color: string; dotColor: string }> = {
-  todo: { color: "bg-blue-100 text-blue-700", dotColor: "bg-blue-500" },
-  "in-progress": { color: "bg-orange-100 text-orange-700", dotColor: "bg-orange-400" },
-  done: { color: "bg-green-100 text-green-700", dotColor: "bg-green-500" },
-};
 
 interface DbTask {
   id: string;
-  user_id: string;
-  column_id: string;
+  board_id: string;
+  assignee_id: string | null;
   title: string;
-  description: string;
-  priority: Priority;
+  description: string | null;
+  status: TaskStatus;
   due_date: string | null;
-  assignee_name: string;
-  assignee_avatar: string;
-  position: number;
+  start_date: string | null;
+  priority: string | null;
+  created_at: string;
+  updated_at: string | null;
+  deleted_at: string | null;
 }
 
-interface DbColumn {
+interface DbBoard {
   id: string;
-  title: string;
-  color: string;
-  dot_color: string;
-  position: number;
+  name: string;
+  description: string | null;
+  owner_id: string;
+}
+
+interface DbUser {
+  id: string;
+  name: string;
 }
 
 function formatSupabaseError(error: unknown) {
@@ -99,14 +99,6 @@ function formatSupabaseError(error: unknown) {
 function logSupabaseError(label: string, error: unknown) {
   const parsed = formatSupabaseError(error);
   console.error(`${label}: ${parsed.message}`, parsed);
-
-  // Common migration mistake: tasks.user_id column not created yet.
-  const messageText = String(parsed.message || "").toLowerCase();
-  if (messageText.includes("user_id") && (messageText.includes("column") || messageText.includes("does not exist"))) {
-    console.error(
-      "Schema hint: add tasks.user_id in Supabase SQL Editor -> alter table public.tasks add column if not exists user_id uuid references auth.users(id) on delete cascade;"
-    );
-  }
 }
 
 function formatDate(dateStr: string | null): string {
@@ -118,71 +110,128 @@ function formatDate(dateStr: string | null): string {
   });
 }
 
-function toTask(row: DbTask): Task {
+function toTask(row: DbTask, assigneeName?: string): Task {
   return {
     id: row.id,
+    boardId: row.board_id,
     title: row.title,
-    description: row.description,
-    priority: row.priority,
+    description: row.description ?? "",
+    status: row.status,
+    priority: (row.priority as Priority) ?? "Medium",
     dueDate: formatDate(row.due_date),
     dueDateRaw: row.due_date ?? "",
-    assignee: { name: row.assignee_name, avatar: row.assignee_avatar },
+    startDateRaw: row.start_date ?? "",
+    assigneeId: row.assignee_id,
+    assigneeName: assigneeName ?? "Unassigned",
   };
 }
 
 export function useSupabaseTasks() {
   const { user, loading: authLoading } = useSupabaseAuth();
-  const [columns, setColumns] = useState<ColumnData[]>([]);
+  const [columns, setColumns] = useState<ColumnData[]>(
+    COLUMNS_CONFIG.map((c) => ({ ...c, tasks: [] }))
+  );
   const [loading, setLoading] = useState(true);
+  const [board, setBoard] = useState<Board | null>(null);
 
+  // Fetch the user's default board
+  const fetchBoard = useCallback(async (): Promise<Board | null> => {
+    if (!user) return null;
+
+    const { data, error } = await supabase
+      .from("boards")
+      .select("*")
+      .eq("owner_id", user.id)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      logSupabaseError("Fetch board error", error);
+      return null;
+    }
+
+    if (!data) return null;
+
+    const dbBoard = data as DbBoard;
+    return {
+      id: dbBoard.id,
+      name: dbBoard.name,
+      description: dbBoard.description ?? "",
+      ownerId: dbBoard.owner_id,
+    };
+  }, [user]);
+
+  // Fetch all tasks for the active board
   const fetchData = useCallback(async () => {
     if (authLoading) return;
 
     setLoading(true);
 
     try {
-      const colRes = await supabase.from("columns").select("*").order("position");
-
-      if (colRes.error) {
-        logSupabaseError("Supabase fetch error", colRes.error);
+      if (!user) {
+        setColumns(COLUMNS_CONFIG.map((c) => ({ ...c, tasks: [] })));
+        setBoard(null);
         return;
       }
 
-      let dbTasks: DbTask[] = [];
-
-      if (user) {
-        const taskRes = await supabase
-          .from("tasks")
-          .select("*")
-          .eq("user_id", user.id)
-          .order("position");
-
-        if (taskRes.error) {
-          logSupabaseError("Supabase fetch error", taskRes.error);
-          return;
-        }
-
-        dbTasks = taskRes.data as DbTask[];
+      // Get the board first
+      const activeBoard = await fetchBoard();
+      if (!activeBoard) {
+        setColumns(COLUMNS_CONFIG.map((c) => ({ ...c, tasks: [] })));
+        return;
       }
-      const dbColumns = colRes.data as DbColumn[];
+      setBoard(activeBoard);
 
-      const mapped: ColumnData[] = dbColumns.map((col) => ({
-        id: col.id,
-        title: col.title,
-        color: col.color ?? COLUMN_META[col.id]?.color ?? "",
-        dotColor: col.dot_color ?? COLUMN_META[col.id]?.dotColor ?? "",
+      // Fetch tasks for this board
+      const taskRes = await supabase
+        .from("tasks")
+        .select("*")
+        .eq("board_id", activeBoard.id)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: true });
+
+      if (taskRes.error) {
+        logSupabaseError("Fetch tasks error", taskRes.error);
+        return;
+      }
+
+      const dbTasks = taskRes.data as DbTask[];
+
+      // Fetch assignee names for tasks that have assignee_id
+      const assigneeIds = [
+        ...new Set(dbTasks.map((t) => t.assignee_id).filter(Boolean)),
+      ] as string[];
+
+      let userMap: Record<string, string> = {};
+      if (assigneeIds.length > 0) {
+        const { data: users, error: usersError } = await supabase
+          .from("users")
+          .select("id, name")
+          .in("id", assigneeIds);
+
+        if (!usersError && users) {
+          for (const u of users as DbUser[]) {
+            userMap[u.id] = u.name;
+          }
+        }
+      }
+
+      // Map tasks into columns
+      const mapped: ColumnData[] = COLUMNS_CONFIG.map((col) => ({
+        ...col,
         tasks: dbTasks
-          .filter((t) => t.column_id === col.id)
-          .map(toTask),
+          .filter((t) => t.status === col.id)
+          .map((t) => toTask(t, t.assignee_id ? userMap[t.assignee_id] : undefined)),
       }));
 
       setColumns(mapped);
     } catch (error) {
-      logSupabaseError("Supabase fetch exception", error);
+      logSupabaseError("Fetch exception", error);
     } finally {
       setLoading(false);
     }
-  }, [authLoading, user]);
+  }, [authLoading, user, fetchBoard]);
 
   useEffect(() => {
     fetchData();
@@ -190,7 +239,7 @@ export function useSupabaseTasks() {
 
   const addTask = useCallback(
     async (
-      columnId: string,
+      status: TaskStatus,
       task: {
         title: string;
         description: string;
@@ -199,26 +248,21 @@ export function useSupabaseTasks() {
         assigneeName: string;
       }
     ) => {
-      if (!user) {
+      if (!user || !board) {
         logSupabaseError("Insert error", { message: "User must be logged in" });
         return;
       }
 
-      const col = columns.find((c) => c.id === columnId);
-      const position = col ? col.tasks.length : 0;
-
       const { data, error } = await supabase
         .from("tasks")
         .insert({
-          user_id: user.id,
-          column_id: columnId,
+          board_id: board.id,
           title: task.title,
           description: task.description,
+          status: status,
           priority: task.priority,
           due_date: task.dueDate || null,
-          assignee_name: task.assigneeName || "Unassigned",
-          assignee_avatar: (task.assigneeName || "U")[0].toUpperCase(),
-          position,
+          assignee_id: null,
         })
         .select()
         .single();
@@ -228,18 +272,18 @@ export function useSupabaseTasks() {
         return;
       }
 
-      const newTask = toTask(data as DbTask);
+      const newTask = toTask(data as DbTask, task.assigneeName || undefined);
       setColumns((prev) =>
         prev.map((c) =>
-          c.id === columnId ? { ...c, tasks: [...c.tasks, newTask] } : c
+          c.id === status ? { ...c, tasks: [...c.tasks, newTask] } : c
         )
       );
     },
-    [columns, user]
+    [board, user]
   );
 
   const moveTask = useCallback(
-    async (taskId: string, newColumnId: string, newPosition: number) => {
+    async (taskId: string, newStatus: TaskStatus) => {
       if (!user) {
         logSupabaseError("Move error", { message: "User must be logged in" });
         return;
@@ -247,9 +291,8 @@ export function useSupabaseTasks() {
 
       const { error } = await supabase
         .from("tasks")
-        .update({ column_id: newColumnId, position: newPosition })
-        .eq("id", taskId)
-        .eq("user_id", user.id);
+        .update({ status: newStatus, updated_at: new Date().toISOString() })
+        .eq("id", taskId);
 
       if (error) logSupabaseError("Move error", error);
     },
@@ -257,24 +300,18 @@ export function useSupabaseTasks() {
   );
 
   const reorderTasks = useCallback(
-    async (columnId: string, tasks: Task[]) => {
+    async (status: TaskStatus, tasks: Task[]) => {
       if (!user) {
         logSupabaseError("Reorder error", { message: "User must be logged in" });
         return;
       }
 
-      const updates = tasks.map((t, i) => ({
-        id: t.id,
-        column_id: columnId,
-        position: i,
-      }));
-
-      for (const u of updates) {
+      // Update status for all tasks in this column
+      for (const t of tasks) {
         const { error } = await supabase
           .from("tasks")
-          .update({ position: u.position, column_id: u.column_id })
-          .eq("id", u.id)
-          .eq("user_id", user.id);
+          .update({ status, updated_at: new Date().toISOString() })
+          .eq("id", t.id);
 
         if (error) {
           logSupabaseError("Reorder error", error);
@@ -301,8 +338,6 @@ export function useSupabaseTasks() {
         return;
       }
 
-      const cleanAssignee = updates.assigneeName.trim() || "Unassigned";
-
       const { data, error } = await supabase
         .from("tasks")
         .update({
@@ -310,11 +345,9 @@ export function useSupabaseTasks() {
           description: updates.description,
           priority: updates.priority,
           due_date: updates.dueDate || null,
-          assignee_name: cleanAssignee,
-          assignee_avatar: cleanAssignee[0].toUpperCase(),
+          updated_at: new Date().toISOString(),
         })
         .eq("id", taskId)
-        .eq("user_id", user.id)
         .select()
         .single();
 
@@ -323,7 +356,7 @@ export function useSupabaseTasks() {
         return;
       }
 
-      const updatedTask = toTask(data as DbTask);
+      const updatedTask = toTask(data as DbTask, updates.assigneeName || undefined);
       setColumns((prev) =>
         prev.map((column) => ({
           ...column,
@@ -334,14 +367,44 @@ export function useSupabaseTasks() {
     [user]
   );
 
+  const deleteTask = useCallback(
+    async (taskId: string) => {
+      if (!user) {
+        logSupabaseError("Delete error", { message: "User must be logged in" });
+        return;
+      }
+
+      // Soft delete
+      const { error } = await supabase
+        .from("tasks")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", taskId);
+
+      if (error) {
+        logSupabaseError("Delete error", error);
+        return;
+      }
+
+      setColumns((prev) =>
+        prev.map((column) => ({
+          ...column,
+          tasks: column.tasks.filter((task) => task.id !== taskId),
+        }))
+      );
+    },
+    [user]
+  );
+
   return {
     columns,
     setColumns,
     loading,
+    board,
     addTask,
     moveTask,
     reorderTasks,
     updateTask,
+    deleteTask,
     refetch: fetchData,
   };
 }

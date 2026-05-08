@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Priority } from "@/lib/data";
+import { Priority, TaskStatus } from "@/lib/data";
 
 interface AddTaskModalProps {
   isOpen: boolean;
@@ -13,7 +13,7 @@ interface AddTaskModalProps {
     dueDate: string;
     assigneeName: string;
   }) => void;
-  columnId: string;
+  columnId: TaskStatus;
 }
 
 export default function AddTaskModal({
@@ -30,9 +30,9 @@ export default function AddTaskModal({
 
   if (!isOpen) return null;
 
-  const columnLabels: Record<string, string> = {
+  const columnLabels: Record<TaskStatus, string> = {
     todo: "To Do",
-    "in-progress": "In Progress",
+    doing: "Doing",
     done: "Done",
   };
 
