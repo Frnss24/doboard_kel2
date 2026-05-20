@@ -317,7 +317,7 @@ export default function Board() {
       description: string;
       priority: Priority;
       dueDate: string;
-      startDate: string;
+      startDate?: string;
       assigneeName: string;
     }) => {
       if (!selectedTask) return;
