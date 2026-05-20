@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useSupabaseAuth } from "@/hooks/useSupabaseAuth";
 import { supabase } from "@/lib/supabase";
+import { useReportNotifications } from "@/hooks/useReportNotifications";
 
 const navItems = [
   { label: "Board", href: "/" },
@@ -16,6 +17,7 @@ export default function Navbar() {
   const pathname = usePathname();
   const { user, loading, signOut } = useSupabaseAuth();
   const [isAdmin, setIsAdmin] = useState(false);
+  const { unreadCount } = useReportNotifications();
 
   useEffect(() => {
     if (!user) {
@@ -94,7 +96,11 @@ export default function Navbar() {
         {/* search removed to avoid duplication with page-level search */}
 
         {/* Notification */}
-        <button className="relative rounded-lg p-2 text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-700">
+        <Link
+          href="/reports#admin-responses"
+          className="relative rounded-lg p-2 text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-700"
+          aria-label={unreadCount > 0 ? `${unreadCount} admin responses` : "View report notifications"}
+        >
           <svg
             className="h-5 w-5"
             fill="none"
@@ -108,8 +114,12 @@ export default function Navbar() {
               d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
             />
           </svg>
-          <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-red-500" />
-        </button>
+          {unreadCount > 0 && (
+            <span className="absolute right-1 top-1 h-4 min-w-4 rounded-full bg-rose-500 px-1 text-[10px] font-semibold leading-4 text-white">
+              {unreadCount > 9 ? "9+" : unreadCount}
+            </span>
+          )}
+        </Link>
 
         {/* User Profile / Auth Actions */}
         {loading ? (
