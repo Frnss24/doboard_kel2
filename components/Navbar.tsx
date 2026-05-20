@@ -132,6 +132,12 @@ export default function Navbar() {
               </div>
               <span className="max-w-40 truncate text-sm font-medium text-gray-700">{userLabel}</span>
             </div>
+            <Link
+              href="/profile"
+              className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+            >
+              Profile
+            </Link>
             <button
               onClick={handleSignOut}
               className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
