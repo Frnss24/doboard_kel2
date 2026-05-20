@@ -24,15 +24,64 @@ interface TaskCardBodyProps {
   dragHandle?: ReactNode;
 }
 
+const DAY_IN_MS = 24 * 60 * 60 * 1000;
+
+function getDeadlineInfo(dueDateRaw?: string) {
+  if (!dueDateRaw) return null;
+
+  const dueDate = new Date(`${dueDateRaw}T00:00:00`);
+  if (Number.isNaN(dueDate.getTime())) return null;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  dueDate.setHours(0, 0, 0, 0);
+
+  const dayDiff = Math.round((dueDate.getTime() - today.getTime()) / DAY_IN_MS);
+
+  if (dayDiff > 1) return null;
+
+  if (dayDiff === 1) {
+    return {
+      label: "Deadline 1 hari lagi",
+      tone: "warning",
+    };
+  }
+
+  if (dayDiff === 0) {
+    return {
+      label: "Deadline hari ini",
+      tone: "danger",
+    };
+  }
+
+  return {
+    label: `Terlambat ${Math.abs(dayDiff)} hari`,
+    tone: "danger",
+  };
+}
+
 function TaskCardBody({ task, isDragging = false, onClick, dragHandle }: TaskCardBodyProps) {
+  const deadlineInfo = getDeadlineInfo(task.dueDateRaw);
   const avatar = task.assigneeName !== "Unassigned"
     ? task.assigneeName.slice(0, 1).toUpperCase()
     : "?";
 
+  const cardToneClasses = deadlineInfo
+    ? "border-red-200 bg-red-50/80"
+    : "border-gray-100 bg-white";
+
+  const dueDateClasses = deadlineInfo
+    ? "text-red-700 font-semibold"
+    : "text-gray-400";
+
+  const deadlineBadgeClasses = deadlineInfo?.tone === "danger"
+    ? "border-red-200 bg-red-100 text-red-700"
+    : "border-orange-200 bg-orange-100 text-orange-700";
+
   return (
     <div
       onClick={() => onClick?.(task)}
-      className={`rounded-xl border border-gray-100 bg-white p-4 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-md ${
+      className={`rounded-xl border p-4 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-md ${cardToneClasses} ${
         onClick ? "cursor-pointer" : ""
       } ${isDragging ? "scale-[1.01] opacity-70 shadow-lg" : ""}`}
     >
@@ -48,8 +97,16 @@ function TaskCardBody({ task, isDragging = false, onClick, dragHandle }: TaskCar
         >
           {task.priority}
         </span>
-        <span className="text-xs text-gray-400">{task.dueDate}</span>
+        <span className={`text-xs ${dueDateClasses}`}>{task.dueDate}</span>
       </div>
+
+      {deadlineInfo && (
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <span className={`rounded-full border px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.16em] ${deadlineBadgeClasses}`}>
+            {deadlineInfo.label}
+          </span>
+        </div>
+      )}
 
       <div className="mt-3 flex items-center gap-2 border-t border-gray-50 pt-3">
         <div className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-blue-400 to-blue-600 text-[10px] font-bold text-white">
