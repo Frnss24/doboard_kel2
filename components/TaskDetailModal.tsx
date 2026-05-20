@@ -13,6 +13,7 @@ interface TaskDetailModalProps {
     description: string;
     priority: Priority;
     dueDate: string;
+    startDate?: string;
     assigneeName: string;
   }) => Promise<void>;
   onDelete?: (taskId: string) => Promise<void>;
@@ -30,6 +31,7 @@ export default function TaskDetailModal({
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<Priority>("Medium");
   const [dueDate, setDueDate] = useState("");
+  const [startDate, setStartDate] = useState("");
   const [assigneeName, setAssigneeName] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -40,6 +42,7 @@ export default function TaskDetailModal({
     setDescription(task.description);
     setPriority(task.priority);
     setDueDate(task.dueDateRaw ?? "");
+    setStartDate((task as any).startDateRaw ?? "");
     setAssigneeName(task.assigneeName);
   }, [task, isOpen]);
 
@@ -56,6 +59,7 @@ export default function TaskDetailModal({
         description,
         priority,
         dueDate,
+        startDate,
         assigneeName,
       });
     } finally {
@@ -141,6 +145,16 @@ export default function TaskDetailModal({
                 className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-900 outline-none transition-colors focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
               />
             </div>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">Start Date</label>
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-900 outline-none transition-colors focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
+            />
           </div>
 
           <div>

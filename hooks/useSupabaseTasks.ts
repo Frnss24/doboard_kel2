@@ -251,6 +251,38 @@ export function useSupabaseTasks() {
     fetchData();
   }, [fetchData]);
 
+  // Subscribe to realtime changes on tasks so different pages/components
+  // using this hook stay in sync without manual refresh.
+  useEffect(() => {
+    if (!user) return;
+
+    // create a channel for tasks changes
+    const channel = supabase
+      .channel("public:tasks")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "tasks" },
+        () => {
+          // refetch latest data when any change occurs
+          fetchData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      try {
+        // unsubscribe/cleanup
+        channel.unsubscribe();
+      } catch (e) {
+        // fallback: attempt to remove channel via client API
+        try {
+          // @ts-ignore
+          supabase.removeChannel(channel);
+        } catch {}
+      }
+    };
+  }, [user, fetchData]);
+
   const switchBoard = (boardId: string) => {
     localStorage.setItem("activeBoardId", boardId);
     setActiveBoardId(boardId);
@@ -291,6 +323,7 @@ export function useSupabaseTasks() {
         description: string;
         priority: Priority;
         dueDate: string;
+        startDate?: string;
         assigneeName: string;
       }
     ) => {
@@ -308,6 +341,7 @@ export function useSupabaseTasks() {
           status: status,
           priority: task.priority,
           due_date: task.dueDate || null,
+          start_date: task.startDate || null,
           assignee_id: null,
         })
         .select()
@@ -376,6 +410,7 @@ export function useSupabaseTasks() {
         description: string;
         priority: Priority;
         dueDate: string;
+        startDate?: string;
         assigneeName: string;
       }
     ) => {
@@ -391,6 +426,7 @@ export function useSupabaseTasks() {
           description: updates.description,
           priority: updates.priority,
           due_date: updates.dueDate || null,
+          start_date: updates.startDate || null,
           updated_at: new Date().toISOString(),
         })
         .eq("id", taskId)

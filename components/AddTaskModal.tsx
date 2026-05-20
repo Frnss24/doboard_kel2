@@ -11,6 +11,7 @@ interface AddTaskModalProps {
     description: string;
     priority: Priority;
     dueDate: string;
+    startDate?: string;
     assigneeName: string;
   }) => void;
   columnId: TaskStatus;
@@ -26,6 +27,7 @@ export default function AddTaskModal({
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<Priority>("Medium");
   const [dueDate, setDueDate] = useState("");
+  const [startDate, setStartDate] = useState("");
   const [assigneeName, setAssigneeName] = useState("");
 
   if (!isOpen) return null;
@@ -39,11 +41,12 @@ export default function AddTaskModal({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
-    onAdd({ title, description, priority, dueDate, assigneeName });
+    onAdd({ title, description, priority, dueDate, startDate, assigneeName });
     setTitle("");
     setDescription("");
     setPriority("Medium");
     setDueDate("");
+    setStartDate("");
     setAssigneeName("");
     onClose();
   };
@@ -130,6 +133,18 @@ export default function AddTaskModal({
                 className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-900 outline-none transition-colors focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
               />
             </div>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">
+              Start Date
+            </label>
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-900 outline-none transition-colors focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
+            />
           </div>
 
           <div>

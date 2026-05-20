@@ -271,6 +271,7 @@ export default function Board() {
       description: string;
       priority: Priority;
       dueDate: string;
+      startDate?: string;
       assigneeName: string;
     }) => {
       if (!user) {
@@ -316,6 +317,7 @@ export default function Board() {
       description: string;
       priority: Priority;
       dueDate: string;
+      startDate: string;
       assigneeName: string;
     }) => {
       if (!selectedTask) return;
