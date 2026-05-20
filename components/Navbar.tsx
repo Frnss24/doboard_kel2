@@ -53,6 +53,11 @@ export default function Navbar() {
     return null;
   }
 
+  // Hide navbar on the login/register page
+  if (pathname.startsWith("/login")) {
+    return null;
+  }
+
   return (
     <nav className="flex items-center justify-between border-b border-gray-200 bg-white px-6 py-3">
       {/* Left section */}
@@ -86,27 +91,7 @@ export default function Navbar() {
 
       {/* Right section */}
       <div className="flex items-center gap-4">
-        {/* Search */}
-        <div className="relative">
-          <svg
-            className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-            />
-          </svg>
-          <input
-            type="text"
-            placeholder="Search tasks..."
-            className="h-9 w-56 rounded-lg border border-gray-200 bg-gray-50 pl-9 pr-4 text-sm text-gray-700 placeholder-gray-400 outline-none transition-colors focus:border-blue-300 focus:bg-white focus:ring-2 focus:ring-blue-100"
-          />
-        </div>
+        {/* search removed to avoid duplication with page-level search */}
 
         {/* Notification */}
         <button className="relative rounded-lg p-2 text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-700">
