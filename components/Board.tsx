@@ -24,11 +24,49 @@ import { useSupabaseTasks } from "@/hooks/useSupabaseTasks";
 import { useSupabaseAuth } from "@/hooks/useSupabaseAuth";
 import { supabase } from "@/lib/supabase";
 
+type HeaderIconButtonProps = {
+  label: string;
+  onClick: () => void;
+  children: React.ReactNode;
+  className?: string;
+  badge?: React.ReactNode;
+  tone?: "default" | "primary";
+};
+
+function HeaderIconButton({ label, onClick, children, className = "", badge, tone = "default" }: HeaderIconButtonProps) {
+  const innerToneClass =
+    tone === "primary"
+      ? "bg-white/15 text-white group-hover:bg-white/25"
+      : "bg-slate-100 text-slate-600 group-hover:bg-slate-200";
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      className={`group relative inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 shadow-sm transition-all hover:-translate-y-0.5 hover:border-slate-300 hover:bg-slate-50 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300 ${className}`}
+    >
+      <span className={`flex h-7 w-7 items-center justify-center rounded-full transition-colors ${innerToneClass}`}>
+        {children}
+      </span>
+      {badge && (
+        <span className="absolute -right-1 -top-1 rounded-full bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700 shadow-sm ring-1 ring-blue-100">
+          {badge}
+        </span>
+      )}
+      <span className="pointer-events-none absolute -bottom-11 left-1/2 z-20 -translate-x-1/2 whitespace-nowrap rounded-full bg-slate-900 px-2.5 py-1 text-[11px] font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100 group-active:opacity-100">
+        {label}
+      </span>
+    </button>
+  );
+}
+
 export default function Board() {
   const router = useRouter();
   const { 
-    columns, setColumns, loading, board, boards, activeBoardId, 
-    switchBoard, createBoard, addTask, reorderTasks, updateTask, deleteTask 
+    columns, setColumns, loading, board, boards, boardMembers, activeBoardId, 
+    switchBoard, createBoard, updateBoard, addTask, reorderTasks, updateTask, deleteTask, createBoardShareToken
   } = useSupabaseTasks();
   const { user, loading: authLoading } = useSupabaseAuth();
 
@@ -48,9 +86,20 @@ export default function Board() {
   const [newBoardDescription, setNewBoardDescription] = useState("");
   const [creatingBoard, setCreatingBoard] = useState(false);
   const [createBoardError, setCreateBoardError] = useState<string | null>(null);
+  const [editBoardOpen, setEditBoardOpen] = useState(false);
+  const [editBoardName, setEditBoardName] = useState("");
+  const [editBoardDescription, setEditBoardDescription] = useState("");
+  const [editingBoard, setEditingBoard] = useState(false);
+  const [editBoardError, setEditBoardError] = useState<string | null>(null);
+  const [membersOpen, setMembersOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
   const [reportSubmitting, setReportSubmitting] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareLink, setShareLink] = useState("");
+  const [shareLoading, setShareLoading] = useState(false);
+  const [shareError, setShareError] = useState<string | null>(null);
+  const [shareCopied, setShareCopied] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -73,6 +122,7 @@ export default function Board() {
   const baseProgress = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
 
   const hasActiveFilters = searchQuery.trim().length > 0 || priorityFilter !== "All";
+  const isOwner = !!user && !!board && board.ownerId === user.id;
 
   const visibleColumns = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -273,6 +323,7 @@ export default function Board() {
       dueDate: string;
       startDate?: string;
       assigneeName: string;
+      assigneeUserId: string;
     }) => {
       if (!user) {
         setAuthNotice("Kamu harus login dulu sebelum menambah task.");
@@ -319,6 +370,7 @@ export default function Board() {
       dueDate: string;
       startDate?: string;
       assigneeName: string;
+      assigneeUserId: string;
     }) => {
       if (!selectedTask) return;
 
@@ -393,6 +445,76 @@ export default function Board() {
     setCreateBoardOpen(false);
   };
 
+  const openEditBoard = () => {
+    if (!board || !isOwner) return;
+
+    setEditBoardName(board.name);
+    setEditBoardDescription(board.description || "");
+    setEditBoardError(null);
+    setEditBoardOpen(true);
+  };
+
+  const handleEditBoard = async (event: React.FormEvent) => {
+    event.preventDefault();
+
+    if (!board) return;
+
+    const name = editBoardName.trim();
+    if (!name) {
+      setEditBoardError("Board name is required.");
+      return;
+    }
+
+    setEditingBoard(true);
+    setEditBoardError(null);
+
+    const success = await updateBoard(board.id, {
+      name,
+      description: editBoardDescription.trim() || "No description",
+    });
+
+    setEditingBoard(false);
+
+    if (!success) {
+      setEditBoardError("Failed to update board. Please try again.");
+      return;
+    }
+
+    setEditBoardOpen(false);
+  };
+
+  const handleOpenShare = async () => {
+    if (!board || !isOwner) return;
+
+    setShareOpen(true);
+    setShareLoading(true);
+    setShareError(null);
+    setShareCopied(false);
+
+    const token = await createBoardShareToken(board.id);
+    if (!token) {
+      setShareError("Gagal membuat link share.");
+      setShareLoading(false);
+      return;
+    }
+
+    setShareLink(`${window.location.origin}/share/${token}`);
+    setShareLoading(false);
+  };
+
+  const handleCopyShareLink = async () => {
+    if (!shareLink) return;
+
+    try {
+      await navigator.clipboard.writeText(shareLink);
+      setShareCopied(true);
+    } catch {
+      setShareError("Tidak bisa menyalin link. Salin manual dari kolom di bawah.");
+    }
+  };
+
+  const memberBadgeLabel = boardMembers.length === 1 ? "1 member" : `${boardMembers.length} members`;
+
   return (
     <div className="flex min-h-[calc(100vh-57px)] flex-col bg-gradient-to-br from-slate-50 via-blue-50 to-cyan-50">
       <div className="border-b border-gray-200/80 bg-white/90 px-4 py-4 backdrop-blur-sm md:px-6">
@@ -466,7 +588,7 @@ export default function Board() {
                                 {(b.name?.slice(0, 1) || "B").toUpperCase()}
                               </div>
                               <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-2">
+                                <div className="flex flex-wrap items-center gap-2">
                                   <span className="truncate text-sm font-semibold text-slate-900">
                                     {b.name}
                                   </span>
@@ -475,6 +597,9 @@ export default function Board() {
                                       Active
                                     </span>
                                   )}
+                                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] ${b.ownerId === user?.id ? "bg-slate-100 text-slate-600" : "bg-amber-50 text-amber-700"}`}>
+                                    {b.ownerId === user?.id ? "Owned" : "Shared"}
+                                  </span>
                                 </div>
                                 <p className="mt-0.5 truncate text-xs text-slate-500">
                                   {b.description || "No description"}
@@ -521,6 +646,25 @@ export default function Board() {
                 <h1 className="text-xl font-bold tracking-tight text-gray-900">
                   {board ? board.name : "DoBOARD"}
                 </h1>
+              )}
+
+              {board && isOwner && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <HeaderIconButton label="Edit Board" onClick={openEditBoard}>
+                    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16.862 4.487a2.25 2.25 0 113.182 3.182L7.5 20.213 3 21l.787-4.5 13.075-12.013z" />
+                    </svg>
+                  </HeaderIconButton>
+                  <HeaderIconButton
+                    label="Members"
+                    onClick={() => setMembersOpen(true)}
+                    badge={boardMembers.length}
+                  >
+                    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-1a4 4 0 00-4-4h-1m-4 5H2v-1a4 4 0 014-4h7m0 0a4 4 0 10-8 0m8 0a4 4 0 11-8 0m8 0h4m-4 0a4 4 0 114 4v1m-4-5v-2m0 2v2" />
+                    </svg>
+                  </HeaderIconButton>
+                </div>
               )}
             </div>
             <p className="mt-0.5 text-sm text-gray-500">
@@ -589,13 +733,13 @@ export default function Board() {
                 onClick={() => setViewMode("kanban")}
                 className={`rounded-md p-1.5 transition ${
                   viewMode === "kanban"
-                    ? "bg-gray-100 text-gray-700"
-                    : "text-gray-400 hover:text-gray-600"
+                    ? "bg-slate-100 text-slate-700 shadow-sm"
+                    : "text-slate-400 hover:text-slate-600"
                 }`}
                 aria-label="Kanban view"
                 aria-pressed={viewMode === "kanban"}
               >
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="h-4.5 w-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -609,13 +753,13 @@ export default function Board() {
                 onClick={() => setViewMode("list")}
                 className={`rounded-md p-1.5 transition ${
                   viewMode === "list"
-                    ? "bg-gray-100 text-gray-700"
-                    : "text-gray-400 hover:text-gray-600"
+                    ? "bg-slate-100 text-slate-700 shadow-sm"
+                    : "text-slate-400 hover:text-slate-600"
                 }`}
                 aria-label="List view"
                 aria-pressed={viewMode === "list"}
               >
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="h-4.5 w-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -627,14 +771,29 @@ export default function Board() {
             </div>
 
             <button
+              type="button"
               onClick={() => openModal("todo")}
-              className="flex h-10 items-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-medium text-white transition-transform hover:-translate-y-0.5 hover:bg-blue-700"
+              className="inline-flex h-11 items-center gap-2 rounded-2xl bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm transition-all hover:-translate-y-0.5 hover:bg-blue-700 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300"
+              aria-label="Add Task"
+              title="Add Task"
             >
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              <svg className="h-4.5 w-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.25} d="M12 4v16m8-8H4" />
               </svg>
-              Add Task
+              <span>Add Task</span>
             </button>
+
+            {isOwner && board && (
+              <HeaderIconButton
+                label="Share Board"
+                onClick={handleOpenShare}
+                className="border-blue-200 bg-white text-blue-700 hover:border-blue-300 hover:bg-blue-50"
+              >
+                <svg className="h-4.5 w-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.25} d="M13.5 10.5L20 4m0 0h-5.5M20 4v5.5M10.5 13.5L4 20m0 0h5.5M4 20v-5.5" />
+                </svg>
+              </HeaderIconButton>
+            )}
           </div>
         </div>
 
@@ -855,6 +1014,7 @@ export default function Board() {
         onClose={() => setModalOpen(false)}
         onAdd={handleAddTask}
         columnId={modalColumnId}
+        members={boardMembers}
       />
 
       <TaskDetailModal
@@ -864,6 +1024,7 @@ export default function Board() {
         onClose={() => setTaskDetailOpen(false)}
         onSave={handleUpdateTask}
         onDelete={handleDeleteTask}
+        members={boardMembers}
       />
 
       <ReportIssueModal
@@ -877,6 +1038,238 @@ export default function Board() {
         submitting={reportSubmitting}
         error={reportError}
       />
+
+      {editBoardOpen && board && isOwner && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+            <div className="absolute inset-0 bg-slate-950/45 backdrop-blur-sm" onClick={() => setEditBoardOpen(false)} />
+            <div className="relative w-full max-w-lg overflow-hidden rounded-3xl border border-white/70 bg-white shadow-[0_30px_100px_rgba(15,23,42,0.22)]">
+              <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-blue-500 via-cyan-400 to-indigo-500" />
+              <div className="border-b border-slate-100 bg-slate-50/80 px-6 py-5">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="mb-2 inline-flex rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600">
+                      Board
+                    </p>
+                    <h2 className="text-lg font-bold text-slate-900">Edit Board</h2>
+                    <p className="mt-1 text-sm leading-6 text-slate-500">
+                      Rename the board or update its description.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setEditBoardOpen(false)}
+                    className="flex h-9 w-9 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-white hover:text-slate-600"
+                  >
+                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              <form onSubmit={handleEditBoard} className="space-y-4 px-6 py-6">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Board name</label>
+                  <input
+                    type="text"
+                    value={editBoardName}
+                    onChange={(event) => setEditBoardName(event.target.value)}
+                    placeholder="Board name"
+                    autoFocus
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-blue-300 focus:bg-white focus:ring-4 focus:ring-blue-100"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Description</label>
+                  <textarea
+                    value={editBoardDescription}
+                    onChange={(event) => setEditBoardDescription(event.target.value)}
+                    placeholder="Board description"
+                    rows={4}
+                    className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-blue-300 focus:bg-white focus:ring-4 focus:ring-blue-100"
+                  />
+                </div>
+
+                {editBoardError && (
+                  <p className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm text-rose-700">
+                    {editBoardError}
+                  </p>
+                )}
+
+                <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:items-center">
+                  <button
+                    type="button"
+                    onClick={() => setEditBoardOpen(false)}
+                    className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={editingBoard}
+                    className="flex-1 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {editingBoard ? "Saving..." : "Save Changes"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {membersOpen && board && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+            <div className="absolute inset-0 bg-slate-950/45 backdrop-blur-sm" onClick={() => setMembersOpen(false)} />
+            <div className="relative w-full max-w-lg overflow-hidden rounded-3xl border border-white/70 bg-white shadow-[0_30px_100px_rgba(15,23,42,0.22)]">
+              <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-blue-500 via-cyan-400 to-indigo-500" />
+              <div className="border-b border-slate-100 bg-slate-50/80 px-6 py-5">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="mb-2 inline-flex rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600">
+                      Members
+                    </p>
+                    <h2 className="text-lg font-bold text-slate-900">Board Members</h2>
+                    <p className="mt-1 text-sm leading-6 text-slate-500">
+                      People who can access and work on this board.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setMembersOpen(false)}
+                    className="flex h-9 w-9 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-white hover:text-slate-600"
+                  >
+                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-3 px-6 py-6">
+                {boardMembers.length > 0 ? (
+                  boardMembers.map((member) => (
+                    <div key={member.userId} className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-slate-900 via-slate-800 to-blue-700 text-sm font-bold text-white">
+                        {(member.name?.slice(0, 1) || "U").toUpperCase()}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <p className="truncate text-sm font-semibold text-slate-900">{member.name}</p>
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] ${member.role === "owner" ? "bg-blue-50 text-blue-700" : "bg-slate-100 text-slate-600"}`}>
+                            {member.role}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500">{member.userId}</p>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+                    No members found yet.
+                  </div>
+                )}
+
+                <div className="flex justify-end pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setMembersOpen(false)}
+                    className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-slate-800"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+      {shareOpen && board && isOwner && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+          <div className="absolute inset-0 bg-slate-950/45 backdrop-blur-sm" onClick={() => setShareOpen(false)} />
+          <div className="relative w-full max-w-xl overflow-hidden rounded-3xl border border-white/70 bg-white shadow-[0_30px_100px_rgba(15,23,42,0.22)]">
+            <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-blue-500 via-cyan-400 to-indigo-500" />
+            <div className="border-b border-slate-100 bg-slate-50/80 px-6 py-5">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="mb-2 inline-flex rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600">
+                    Share
+                  </p>
+                  <h2 className="text-lg font-bold text-slate-900">Share {board.name}</h2>
+                  <p className="mt-1 text-sm leading-6 text-slate-500">
+                    Anyone with the link can join this board after login.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShareOpen(false)}
+                  className="flex h-9 w-9 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-white hover:text-slate-600"
+                >
+                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-4 px-6 py-6">
+              {shareLoading ? (
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
+                  Menyiapkan link share...
+                </div>
+              ) : shareError ? (
+                <p className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm text-rose-700">
+                  {shareError}
+                </p>
+              ) : (
+                <>
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-slate-700">Share link</label>
+                    <div className="flex gap-2">
+                      <input
+                        readOnly
+                        value={shareLink}
+                        className="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleCopyShareLink}
+                        className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-slate-800"
+                      >
+                        {shareCopied ? "Copied" : "Copy"}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl bg-blue-50 px-4 py-4 text-sm text-blue-800">
+                    <p className="font-semibold">Members on this board</p>
+                    <p className="mt-1 text-blue-700/80">Board members can be assigned directly from the task form.</p>
+                    <p className="mt-3 text-xs font-medium uppercase tracking-[0.16em] text-blue-600">{boardMembers.length} member(s)</p>
+                  </div>
+                </>
+              )}
+
+              <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:items-center">
+                <button
+                  type="button"
+                  onClick={() => setShareOpen(false)}
+                  className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  onClick={handleOpenShare}
+                  className="flex-1 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700"
+                >
+                  Regenerate Link
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

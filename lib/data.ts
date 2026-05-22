@@ -30,6 +30,12 @@ export interface Board {
   ownerId: string;
 }
 
+export interface BoardMember {
+  userId: string;
+  name: string;
+  role: "owner" | "member";
+}
+
 // Hardcoded column definitions based on task_status enum
 export const COLUMNS_CONFIG: Omit<ColumnData, "tasks">[] = [
   {

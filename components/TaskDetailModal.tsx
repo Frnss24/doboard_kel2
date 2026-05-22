@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Priority, Task } from "@/lib/data";
+import { Priority, Task, BoardMember } from "@/lib/data";
 
 interface TaskDetailModalProps {
   isOpen: boolean;
@@ -15,8 +15,10 @@ interface TaskDetailModalProps {
     dueDate: string;
     startDate?: string;
     assigneeName: string;
+    assigneeUserId: string;
   }) => Promise<void>;
   onDelete?: (taskId: string) => Promise<void>;
+  members: BoardMember[];
 }
 
 export default function TaskDetailModal({
@@ -26,13 +28,14 @@ export default function TaskDetailModal({
   onClose,
   onSave,
   onDelete,
+  members,
 }: TaskDetailModalProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<Priority>("Medium");
   const [dueDate, setDueDate] = useState("");
   const [startDate, setStartDate] = useState("");
-  const [assigneeName, setAssigneeName] = useState("");
+  const [assigneeUserId, setAssigneeUserId] = useState("");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -43,7 +46,7 @@ export default function TaskDetailModal({
     setPriority(task.priority);
     setDueDate(task.dueDateRaw ?? "");
     setStartDate((task as any).startDateRaw ?? "");
-    setAssigneeName(task.assigneeName);
+    setAssigneeUserId(task.assigneeId ?? "");
   }, [task, isOpen]);
 
   if (!isOpen || !task) return null;
@@ -51,6 +54,8 @@ export default function TaskDetailModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || saving) return;
+
+    const selectedMember = members.find((member) => member.userId === assigneeUserId);
 
     setSaving(true);
     try {
@@ -60,7 +65,8 @@ export default function TaskDetailModal({
         priority,
         dueDate,
         startDate,
-        assigneeName,
+        assigneeName: selectedMember?.name ?? "Unassigned",
+        assigneeUserId,
       });
     } finally {
       setSaving(false);
@@ -158,13 +164,23 @@ export default function TaskDetailModal({
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Assignee Name</label>
-            <input
-              type="text"
-              value={assigneeName}
-              onChange={(e) => setAssigneeName(e.target.value)}
+            <label className="mb-1 block text-sm font-medium text-gray-700">Assignee</label>
+            <select
+              value={assigneeUserId}
+              onChange={(e) => setAssigneeUserId(e.target.value)}
               className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-900 outline-none transition-colors focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
-            />
+              disabled={members.length === 0}
+            >
+              <option value="">Unassigned</option>
+              {members.map((member) => (
+                <option key={member.userId} value={member.userId}>
+                  {member.name} {member.role === "owner" ? "(owner)" : ""}
+                </option>
+              ))}
+            </select>
+            {members.length === 0 && (
+              <p className="mt-1 text-xs text-gray-500">No board members available yet.</p>
+            )}
           </div>
 
           <div className="flex items-center gap-3 pt-2">

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Priority, TaskStatus } from "@/lib/data";
+import { Priority, TaskStatus, BoardMember } from "@/lib/data";
 
 interface AddTaskModalProps {
   isOpen: boolean;
@@ -13,8 +13,10 @@ interface AddTaskModalProps {
     dueDate: string;
     startDate?: string;
     assigneeName: string;
+    assigneeUserId: string;
   }) => void;
   columnId: TaskStatus;
+  members: BoardMember[];
 }
 
 export default function AddTaskModal({
@@ -22,13 +24,14 @@ export default function AddTaskModal({
   onClose,
   onAdd,
   columnId,
+  members,
 }: AddTaskModalProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<Priority>("Medium");
   const [dueDate, setDueDate] = useState("");
   const [startDate, setStartDate] = useState("");
-  const [assigneeName, setAssigneeName] = useState("");
+  const [assigneeUserId, setAssigneeUserId] = useState("");
 
   if (!isOpen) return null;
 
@@ -41,13 +44,23 @@ export default function AddTaskModal({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
-    onAdd({ title, description, priority, dueDate, startDate, assigneeName });
+    const selectedMember = members.find((member) => member.userId === assigneeUserId);
+
+    onAdd({
+      title,
+      description,
+      priority,
+      dueDate,
+      startDate,
+      assigneeName: selectedMember?.name ?? "Unassigned",
+      assigneeUserId,
+    });
     setTitle("");
     setDescription("");
     setPriority("Medium");
     setDueDate("");
     setStartDate("");
-    setAssigneeName("");
+    setAssigneeUserId("");
     onClose();
   };
 
@@ -148,16 +161,23 @@ export default function AddTaskModal({
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
-              Assignee Name
-            </label>
-            <input
-              type="text"
-              value={assigneeName}
-              onChange={(e) => setAssigneeName(e.target.value)}
-              placeholder="Enter assignee name"
+            <label className="mb-1 block text-sm font-medium text-gray-700">Assignee</label>
+            <select
+              value={assigneeUserId}
+              onChange={(e) => setAssigneeUserId(e.target.value)}
               className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-900 outline-none transition-colors focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
-            />
+              disabled={members.length === 0}
+            >
+              <option value="">Unassigned</option>
+              {members.map((member) => (
+                <option key={member.userId} value={member.userId}>
+                  {member.name} {member.role === "owner" ? "(owner)" : ""}
+                </option>
+              ))}
+            </select>
+            {members.length === 0 && (
+              <p className="mt-1 text-xs text-gray-500">No board members available yet.</p>
+            )}
           </div>
 
           <div className="flex items-center gap-3 pt-2">

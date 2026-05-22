@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
-import { ColumnData, Task, Priority, TaskStatus, Board, COLUMNS_CONFIG } from "@/lib/data";
+import { ColumnData, Task, Priority, TaskStatus, Board, BoardMember, COLUMNS_CONFIG } from "@/lib/data";
 import { useSupabaseAuth } from "@/hooks/useSupabaseAuth";
 
 interface DbTask {
@@ -30,6 +30,17 @@ interface DbBoard {
 interface DbUser {
   id: string;
   name: string;
+}
+
+interface RpcBoardMember {
+  user_id: string;
+  name: string | null;
+  role: "owner" | "member";
+}
+
+interface RpcUserName {
+  id: string;
+  name: string | null;
 }
 
 function formatSupabaseError(error: unknown) {
@@ -134,6 +145,7 @@ export function useSupabaseTasks() {
   const [loading, setLoading] = useState(true);
   const [board, setBoard] = useState<Board | null>(null);
   const [boards, setBoards] = useState<Board[]>([]);
+  const [boardMembers, setBoardMembers] = useState<BoardMember[]>([]);
   const [activeBoardId, setActiveBoardId] = useState<string | null>(null);
 
   // Fetch all user boards
@@ -143,7 +155,6 @@ export function useSupabaseTasks() {
     const { data, error } = await supabase
       .from("boards")
       .select("*")
-      .eq("owner_id", user.id)
       .is("deleted_at", null)
       .order("created_at", { ascending: true });
 
@@ -162,6 +173,25 @@ export function useSupabaseTasks() {
     }));
   }, [user]);
 
+  const fetchBoardMembers = useCallback(async (boardId: string): Promise<BoardMember[]> => {
+    const { data, error } = await supabase.rpc("get_board_members", {
+      board_uuid: boardId,
+    });
+
+    if (error) {
+      logSupabaseError("Fetch board members error", error);
+      return [];
+    }
+
+    if (!data) return [];
+
+    return (data as RpcBoardMember[]).map((row) => ({
+      userId: row.user_id,
+      name: row.name ?? "Unknown user",
+      role: row.role,
+    }));
+  }, []);
+
   // Fetch all tasks for the active board
   const fetchData = useCallback(async () => {
     if (authLoading) return;
@@ -173,6 +203,7 @@ export function useSupabaseTasks() {
         setColumns(COLUMNS_CONFIG.map((c) => ({ ...c, tasks: [] })));
         setBoard(null);
         setBoards([]);
+        setBoardMembers([]);
         return;
       }
 
@@ -183,6 +214,7 @@ export function useSupabaseTasks() {
       if (allBoards.length === 0) {
         setColumns(COLUMNS_CONFIG.map((c) => ({ ...c, tasks: [] })));
         setBoard(null);
+        setBoardMembers([]);
         return;
       }
 
@@ -196,6 +228,7 @@ export function useSupabaseTasks() {
       setActiveBoardId(currentActiveId);
       const activeBoard = allBoards.find(b => b.id === currentActiveId) || allBoards[0];
       setBoard(activeBoard);
+      setBoardMembers(await fetchBoardMembers(activeBoard.id));
 
       // Fetch tasks for this board
       const taskRes = await supabase
@@ -219,14 +252,13 @@ export function useSupabaseTasks() {
 
       let userMap: Record<string, string> = {};
       if (assigneeIds.length > 0) {
-        const { data: users, error: usersError } = await supabase
-          .from("users")
-          .select("id, name")
-          .in("id", assigneeIds);
+        const { data: users, error: usersError } = await supabase.rpc("get_users_by_ids", {
+          user_ids: assigneeIds,
+        });
 
         if (!usersError && users) {
-          for (const u of users as DbUser[]) {
-            userMap[u.id] = u.name;
+          for (const u of users as RpcUserName[]) {
+            userMap[u.id] = u.name ?? "Unknown user";
           }
         }
       }
@@ -245,7 +277,7 @@ export function useSupabaseTasks() {
     } finally {
       setLoading(false);
     }
-  }, [authLoading, user, fetchBoards]);
+  }, [authLoading, user, fetchBoards, fetchBoardMembers]);
 
   useEffect(() => {
     fetchData();
@@ -308,11 +340,37 @@ export function useSupabaseTasks() {
     }
 
     if (data) {
+      await supabase.from("board_members").insert({
+        board_id: data.id,
+        user_id: user.id,
+        role: "owner",
+      });
       switchBoard(data.id);
       return true;
     }
 
     return false;
+  };
+
+  const updateBoard = async (boardId: string, updates: { name: string; description: string }) => {
+    if (!user) return false;
+
+    const { error } = await supabase
+      .from("boards")
+      .update({
+        name: updates.name.trim(),
+        description: updates.description.trim(),
+      })
+      .eq("id", boardId)
+      .eq("owner_id", user.id);
+
+    if (error) {
+      logSupabaseError("Update board error", error);
+      return false;
+    }
+
+    await fetchData();
+    return true;
   };
 
   const addTask = useCallback(
@@ -325,6 +383,7 @@ export function useSupabaseTasks() {
         dueDate: string;
         startDate?: string;
         assigneeName: string;
+        assigneeUserId: string;
       }
     ) => {
       if (!user || !board) {
@@ -342,7 +401,7 @@ export function useSupabaseTasks() {
           priority: task.priority,
           due_date: task.dueDate || null,
           start_date: task.startDate || null,
-          assignee_id: null,
+          assignee_id: task.assigneeUserId || null,
         })
         .select()
         .single();
@@ -412,6 +471,7 @@ export function useSupabaseTasks() {
         dueDate: string;
         startDate?: string;
         assigneeName: string;
+        assigneeUserId: string;
       }
     ) => {
       if (!user) {
@@ -427,6 +487,7 @@ export function useSupabaseTasks() {
           priority: updates.priority,
           due_date: updates.dueDate || null,
           start_date: updates.startDate || null,
+          assignee_id: updates.assigneeUserId || null,
           updated_at: new Date().toISOString(),
         })
         .eq("id", taskId)
@@ -477,20 +538,61 @@ export function useSupabaseTasks() {
     [user]
   );
 
+  const createBoardShareToken = useCallback(async (boardId: string) => {
+    if (!user) return null;
+
+    const targetBoard = boards.find((item) => item.id === boardId);
+    if (!targetBoard || targetBoard.ownerId !== user.id) return null;
+
+    const { data: existing, error: existingError } = await supabase
+      .from("board_shares")
+      .select("token")
+      .eq("board_id", boardId)
+      .eq("created_by", user.id)
+      .is("revoked_at", null)
+      .maybeSingle();
+
+    if (existingError) {
+      logSupabaseError("Fetch board share error", existingError);
+      return null;
+    }
+
+    if (existing?.token) {
+      return existing.token;
+    }
+
+    const token = crypto.randomUUID();
+    const { error } = await supabase.from("board_shares").insert({
+      board_id: boardId,
+      token,
+      created_by: user.id,
+    });
+
+    if (error) {
+      logSupabaseError("Create board share error", error);
+      return null;
+    }
+
+    return token;
+  }, [boards, user]);
+
   return {
     columns,
     setColumns,
     loading,
     board,
     boards,
+    boardMembers,
     activeBoardId,
     switchBoard,
     createBoard,
+    updateBoard,
     addTask,
     reorderTasks,
     updateTask,
     deleteTask,
     moveTask,
+    createBoardShareToken,
     refetch: fetchData,
   };
 }
