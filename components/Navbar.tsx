@@ -8,7 +8,7 @@ import { supabase } from "@/lib/supabase";
 import { useReportNotifications } from "@/hooks/useReportNotifications";
 
 const navItems = [
-  { label: "Board", href: "/" },
+  { label: "Board", href: "/board" },
   { label: "Timeline", href: "/timeline" },
   { label: "Reports", href: "/reports" },
 ];

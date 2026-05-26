@@ -9,6 +9,7 @@ export default function ProfilePage() {
   const { user, loading } = useSupabaseAuth();
   const [name, setName] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [oldPassword, setOldPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -57,6 +58,25 @@ export default function ProfilePage() {
       return;
     }
 
+    // If changing password, require old password and verify it
+    if (newPassword) {
+      if (!oldPassword) {
+        setError("Masukkan password lama untuk mengubah password");
+        return;
+      }
+
+      // Verify old password by attempting sign in
+      const { error: verifyError } = await supabase.auth.signInWithPassword({
+        email: user.email ?? "",
+        password: oldPassword,
+      });
+
+      if (verifyError) {
+        setError("Password lama salah");
+        return;
+      }
+    }
+
     setSaving(true);
 
     try {
@@ -80,6 +100,7 @@ export default function ProfilePage() {
       }
 
       setNewPassword("");
+      setOldPassword("");
       setConfirmPassword("");
       setMessage("Profile berhasil diperbarui.");
     } catch (err: any) {
@@ -103,6 +124,17 @@ export default function ProfilePage() {
               onChange={(e) => setName(e.target.value)}
               type="text"
               required
+              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-slate-700">Password Lama</label>
+            <input
+              value={oldPassword}
+              onChange={(e) => setOldPassword(e.target.value)}
+              type="password"
+              placeholder="Masukkan password lama (wajib saat ubah password)"
               className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
             />
           </div>

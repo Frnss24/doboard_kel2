@@ -417,6 +417,25 @@ export function useSupabaseTasks() {
           c.id === status ? { ...c, tasks: [...c.tasks, newTask] } : c
         )
       );
+
+      // Audit log: task created
+      try {
+        const userName = (user.user_metadata as any)?.full_name ?? user.email ?? null;
+        await supabase.from("task_audit_logs").insert({
+          task_id: data.id,
+          task_title: data.title,
+          board_id: board.id,
+          user_id: user.id,
+          user_name: userName,
+          action: "created",
+          old_status: null,
+          new_status: status,
+          details: { priority: task.priority },
+          created_at: new Date().toISOString(),
+        });
+      } catch (err) {
+        // ignore audit errors
+      }
     },
     [board, user]
   );
@@ -427,13 +446,41 @@ export function useSupabaseTasks() {
         logSupabaseError("Move error", { message: "User must be logged in" });
         return;
       }
+      try {
+        // fetch previous task state
+        const { data: prev } = await supabase.from("tasks").select("id, title, status, board_id").eq("id", taskId).maybeSingle();
 
-      const { error } = await supabase
-        .from("tasks")
-        .update({ status: newStatus, updated_at: new Date().toISOString() })
-        .eq("id", taskId);
+        const { error } = await supabase
+          .from("tasks")
+          .update({ status: newStatus, updated_at: new Date().toISOString() })
+          .eq("id", taskId);
 
-      if (error) logSupabaseError("Move error", error);
+        if (error) {
+          logSupabaseError("Move error", error);
+          return;
+        }
+
+        // insert audit log
+        try {
+          const userName = (user.user_metadata as any)?.full_name ?? user.email ?? null;
+          await supabase.from("task_audit_logs").insert({
+            task_id: taskId,
+            task_title: prev?.title ?? null,
+            board_id: prev?.board_id ?? null,
+            user_id: user.id,
+            user_name: userName,
+            action: "moved",
+            old_status: prev?.status ?? null,
+            new_status: newStatus,
+            details: null,
+            created_at: new Date().toISOString(),
+          });
+        } catch (err) {
+          // ignore
+        }
+      } catch (err) {
+        logSupabaseError("Move error", err);
+      }
     },
     [user]
   );
@@ -447,13 +494,40 @@ export function useSupabaseTasks() {
 
       // Update status for all tasks in this column
       for (const t of tasks) {
-        const { error } = await supabase
-          .from("tasks")
-          .update({ status, updated_at: new Date().toISOString() })
-          .eq("id", t.id);
+        try {
+          const { data: prev } = await supabase.from("tasks").select("id, title, status, board_id").eq("id", t.id).maybeSingle();
+          const { error } = await supabase
+            .from("tasks")
+            .update({ status, updated_at: new Date().toISOString() })
+            .eq("id", t.id);
 
-        if (error) {
-          logSupabaseError("Reorder error", error);
+          if (error) {
+            logSupabaseError("Reorder error", error);
+            break;
+          }
+
+          // audit per-task if status actually changed
+          try {
+            if ((prev?.status ?? null) !== status) {
+              const userName = (user.user_metadata as any)?.full_name ?? user.email ?? null;
+              await supabase.from("task_audit_logs").insert({
+                task_id: t.id,
+                task_title: prev?.title ?? null,
+                board_id: prev?.board_id ?? null,
+                user_id: user.id,
+                user_name: userName,
+                action: "moved",
+                old_status: prev?.status ?? null,
+                new_status: status,
+                details: null,
+                created_at: new Date().toISOString(),
+              });
+            }
+          } catch (err) {
+            // ignore
+          }
+        } catch (err) {
+          logSupabaseError("Reorder error", err);
           break;
         }
       }
@@ -506,6 +580,33 @@ export function useSupabaseTasks() {
           tasks: column.tasks.map((task) => (task.id === taskId ? updatedTask : task)),
         }))
       );
+
+      // Audit: record what changed
+      try {
+        const { data: prev } = await supabase.from("tasks").select("id, title, status, assignee_id, board_id").eq("id", taskId).maybeSingle();
+        const userName = (user.user_metadata as any)?.full_name ?? user.email ?? null;
+        const changes: any = {};
+        if (prev?.title !== updates.title.trim()) changes.title = { from: prev?.title, to: updates.title.trim() };
+        if ((prev?.assignee_id ?? null) !== (updates.assigneeUserId || null)) changes.assignee = { from: prev?.assignee_id ?? null, to: updates.assigneeUserId || null };
+        if ((prev?.status ?? null) !== undefined) {
+          // status may not be part of this update, skip
+        }
+
+        await supabase.from("task_audit_logs").insert({
+          task_id: taskId,
+          task_title: updates.title.trim(),
+          board_id: prev?.board_id ?? null,
+          user_id: user.id,
+          user_name: userName,
+          action: "updated",
+          old_status: prev?.status ?? null,
+          new_status: prev?.status ?? null,
+          details: Object.keys(changes).length ? changes : null,
+          created_at: new Date().toISOString(),
+        });
+      } catch (err) {
+        // ignore
+      }
     },
     [user]
   );
@@ -517,14 +618,39 @@ export function useSupabaseTasks() {
         return;
       }
 
-      // Soft delete
-      const { error } = await supabase
-        .from("tasks")
-        .update({ deleted_at: new Date().toISOString() })
-        .eq("id", taskId);
+      try {
+        const { data: prev } = await supabase.from("tasks").select("id, title, status, board_id").eq("id", taskId).maybeSingle();
 
-      if (error) {
-        logSupabaseError("Delete error", error);
+        // Soft delete
+        const { error } = await supabase
+          .from("tasks")
+          .update({ deleted_at: new Date().toISOString() })
+          .eq("id", taskId);
+
+        if (error) {
+          logSupabaseError("Delete error", error);
+          return;
+        }
+
+        try {
+          const userName = (user.user_metadata as any)?.full_name ?? user.email ?? null;
+          await supabase.from("task_audit_logs").insert({
+            task_id: taskId,
+            task_title: prev?.title ?? null,
+            board_id: prev?.board_id ?? null,
+            user_id: user.id,
+            user_name: userName,
+            action: "deleted",
+            old_status: prev?.status ?? null,
+            new_status: null,
+            details: null,
+            created_at: new Date().toISOString(),
+          });
+        } catch (err) {
+          // ignore
+        }
+      } catch (err) {
+        logSupabaseError("Delete error", err);
         return;
       }
 

@@ -1,5 +1,9 @@
 "use client";
+
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useSupabaseTasks } from "@/hooks/useSupabaseTasks";
+import { useSupabaseAuth } from "@/hooks/useSupabaseAuth";
 
 const DEFAULT_DAYS = 30;
 const MAX_DAYS = 120;
@@ -25,8 +29,25 @@ function isValidDateString(s: string | undefined | null) {
 }
 
 export default function TimelinePage() {
+  const { user, loading: authLoading } = useSupabaseAuth();
+  const router = useRouter();
   const { columns: initialColumns, loading, board, refetch } = useSupabaseTasks();
   const today = new Date();
+
+  useEffect(() => {
+    if (authLoading) return;
+    if (!user) {
+      router.replace("/login?next=/timeline");
+    }
+  }, [authLoading, user, router]);
+
+  if (authLoading || !user) {
+    return (
+      <div className="flex min-h-[calc(100vh-57px)] items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-cyan-50">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
+      </div>
+    );
+  }
 
   // gather all valid due dates from tasks
   const allDates = initialColumns

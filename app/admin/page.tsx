@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
 import { useSupabaseAuth } from "@/hooks/useSupabaseAuth";
 
@@ -19,6 +19,8 @@ interface Report {
   status: string | null;
   decision_note: string | null;
   created_at: string;
+  updated_at?: string | null;
+  reporter_id?: string | null;
 }
 
 const STATUS_OPTIONS = ["open", "in_review", "resolved"];
@@ -123,6 +125,27 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     fetchData();
+
+    const channel = supabase
+      .channel("admin-reports")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "reports" },
+        () => {
+          fetchData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      try {
+        supabase.removeChannel(channel);
+      } catch (err) {
+        // fallback
+        // @ts-ignore
+        channel.unsubscribe?.();
+      }
+    };
   }, [fetchData]);
 
   const handleSaveReport = async (reportId: string) => {
@@ -136,6 +159,7 @@ export default function AdminDashboard() {
         status: edits.status,
         decision_note: edits.decision_note,
         updated_at: new Date().toISOString(),
+        admin_seen: true,
       })
       .eq("id", reportId);
 
@@ -158,6 +182,36 @@ export default function AdminDashboard() {
   const openCount = reports.filter((r) => !r.status || r.status === "open").length;
   const reviewCount = reports.filter((r) => r.status === "in_review").length;
   const resolvedCount = reports.filter((r) => r.status === "resolved").length;
+
+  const [statusFilter, setStatusFilter] = useState<"all" | "open" | "in_review" | "resolved">("all");
+  const [sortField, setSortField] = useState<"created_at" | "updated_at">("created_at");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+
+  const filteredReports = useMemo(() => {
+    let out = [...reports];
+    if (statusFilter !== "all") {
+      if (statusFilter === "open") {
+        out = out.filter((r) => !r.status || r.status === "open");
+      } else {
+        out = out.filter((r) => (r.status ?? "open") === statusFilter);
+      }
+    }
+
+    out.sort((a, b) => {
+      const aVal = (a as any)[sortField];
+      const bVal = (b as any)[sortField];
+
+      // Convert to timestamps for comparison; handle nulls
+      const aTime = aVal ? new Date(aVal).getTime() : 0;
+      const bTime = bVal ? new Date(bVal).getTime() : 0;
+
+      if (aTime === bTime) return 0;
+      if (sortOrder === "asc") return aTime - bTime;
+      return bTime - aTime;
+    });
+
+    return out;
+  }, [reports, statusFilter, sortField, sortOrder]);
 
   if (loading) {
     return (
@@ -275,7 +329,7 @@ export default function AdminDashboard() {
       </div>
 
       {/* Reports & Moderation */}
-      <div className="rounded-3xl border border-gray-200/80 bg-white/80 p-8 backdrop-blur-sm shadow-sm">
+      <div id="admin-reports" className="rounded-3xl border border-gray-200/80 bg-white/80 p-8 backdrop-blur-sm shadow-sm">
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-xl font-extrabold text-gray-900">Board Reports &amp; Moderation</h2>
@@ -296,6 +350,38 @@ export default function AdminDashboard() {
               <span className="h-2.5 w-2.5 rounded-full bg-green-400 shadow-sm" />
               {resolvedCount} <span className="hidden sm:inline">Resolved</span>
             </span>
+          </div>
+          <div className="flex items-center gap-3">
+            <label className="text-sm text-gray-500">Filter:</label>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as any)}
+              className="rounded-md border border-gray-200 bg-white px-2 py-1 text-sm text-gray-700 outline-none"
+            >
+              <option value="all">All</option>
+              <option value="open">Open</option>
+              <option value="in_review">In Review</option>
+              <option value="resolved">Resolved</option>
+            </select>
+
+            <label className="ml-3 text-sm text-gray-500">Sort by:</label>
+            <select
+              value={sortField}
+              onChange={(e) => setSortField(e.target.value as any)}
+              className="rounded-md border border-gray-200 bg-white px-2 py-1 text-sm text-gray-700 outline-none"
+            >
+              <option value="created_at">Created</option>
+              <option value="updated_at">Updated</option>
+            </select>
+
+            <button
+              type="button"
+              onClick={() => setSortOrder((s) => (s === "desc" ? "asc" : "desc"))}
+              className="ml-2 rounded-md border border-gray-200 bg-white px-2 py-1 text-sm text-gray-700"
+              title="Toggle sort order"
+            >
+              {sortOrder === "desc" ? "Desc" : "Asc"}
+            </button>
           </div>
         </div>
 
@@ -323,7 +409,7 @@ export default function AdminDashboard() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {reports.map((report) => {
+                {filteredReports.map((report) => {
                   const edits = editingReports[report.id];
                   return (
                     <tr key={report.id} className="group">

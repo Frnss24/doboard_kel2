@@ -1,8 +1,12 @@
 "use client"
 
+import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import { useSupabaseTasks } from "@/hooks/useSupabaseTasks"
 import { Task } from "@/lib/data"
 import { useReportNotifications } from "@/hooks/useReportNotifications"
+import { useSupabaseAuth } from "@/hooks/useSupabaseAuth"
+import { supabase } from "@/lib/supabase"
 
 import StatsCard from "@/components/reports/StatsCard"
 import StatusChart from "@/components/reports/StatusChart"
@@ -68,9 +72,89 @@ function buildRecentActivities(columns: { id: string; title: string; tasks: Task
 }
 
 export default function ReportsPage() {
+  const { user, loading: authLoading } = useSupabaseAuth()
+  const router = useRouter()
 
   const { columns, loading, board } = useSupabaseTasks()
-  const { loading: reportLoading, responses } = useReportNotifications()
+  const { loading: reportLoading, responses, markAllAsRead } = useReportNotifications()
+  const [auditLogs, setAuditLogs] = useState<any[]>([])
+  const [loadingLogs, setLoadingLogs] = useState(false)
+
+  useEffect(() => {
+    if (authLoading) return
+    if (!user) {
+      router.replace("/login?next=/reports")
+    }
+  }, [authLoading, user, router])
+
+  // Mark user responses as read when the admin-responses section is shown
+  useEffect(() => {
+    if (reportLoading) return
+    if (responses.length === 0) return
+    try {
+      markAllAsRead?.()
+    } catch (err) {
+      // ignore
+    }
+  }, [reportLoading, responses, markAllAsRead])
+
+  // Fetch audit logs for this board
+  useEffect(() => {
+    let mounted = true
+    if (!board) {
+      setAuditLogs([])
+      return
+    }
+
+    const fetchLogs = async () => {
+      setLoadingLogs(true)
+      const { data, error } = await supabase
+        .from("task_audit_logs")
+        .select("*")
+        .eq("board_id", board.id)
+        .order("created_at", { ascending: false })
+        .limit(20)
+
+      if (!mounted) return
+      if (error) {
+        console.error("Fetch audit logs error:", error)
+        setAuditLogs([])
+      } else {
+        setAuditLogs(data ?? [])
+      }
+      setLoadingLogs(false)
+    }
+
+    fetchLogs()
+
+    const channel = supabase
+      .channel("audit-logs")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "task_audit_logs", filter: `board_id=eq.${board.id}` },
+        (payload) => {
+          setAuditLogs((prev) => [payload.new, ...prev].slice(0, 20))
+        }
+      )
+      .subscribe()
+
+    return () => {
+      mounted = false
+      try {
+        supabase.removeChannel(channel)
+      } catch (err) {
+        // ignore
+      }
+    }
+  }, [board])
+
+  if (authLoading || !user) {
+    return (
+      <div className="flex min-h-[calc(100vh-57px)] items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-cyan-50">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
+      </div>
+    )
+  }
 
   const allTasks = columns.flatMap(col => col.tasks)
 
@@ -113,6 +197,7 @@ export default function ReportsPage() {
   const recentActivities = buildRecentActivities(columns)
 
   return (
+    <>
 
     <div className="flex min-h-[calc(100vh-57px)] flex-col bg-gradient-to-br from-slate-50 via-blue-50 to-cyan-50">
 
@@ -205,6 +290,50 @@ export default function ReportsPage() {
       </div>
 
     </div>
+
+      <section className="rounded-3xl border border-slate-200/80 bg-white/80 p-6 shadow-sm">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-bold text-slate-900">Audit Log</h2>
+          <p className="text-sm text-slate-500">Recent task changes (who moved/edited tasks)</p>
+        </div>
+
+        <div className="mt-4">
+          {loadingLogs ? (
+            <p className="text-sm text-slate-500">Loading audit logs...</p>
+          ) : auditLogs.length === 0 ? (
+            <p className="text-sm text-slate-500">No audit entries yet.</p>
+          ) : (
+            <ul className="space-y-3">
+              {auditLogs.map((log) => (
+                <li key={log.id} className="flex items-start justify-between rounded-lg border p-3">
+                  <div>
+                    <p className="text-sm text-slate-700">
+                      <span className="font-semibold">{log.user_name ?? log.user_id}</span>
+                      {" "}
+                      {log.action === "moved" ? (
+                        <>
+                          moved <span className="font-semibold">{log.task_title}</span> from <span className="font-medium">{log.old_status}</span> to <span className="font-medium">{log.new_status}</span>
+                        </>
+                      ) : log.action === "created" ? (
+                        <>created task <span className="font-semibold">{log.task_title}</span></>
+                      ) : log.action === "deleted" ? (
+                        <>deleted task <span className="font-semibold">{log.task_title}</span></>
+                      ) : (
+                        <>updated <span className="font-semibold">{log.task_title}</span></>
+                      )}
+                    </p>
+                    {log.details && (
+                      <p className="mt-1 text-xs text-slate-500">{typeof log.details === 'string' ? log.details : JSON.stringify(log.details)}</p>
+                    )}
+                  </div>
+                  <div className="text-xs text-slate-400">{new Date(log.created_at).toLocaleString()}</div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </section>
+    </>
 
   )
 }

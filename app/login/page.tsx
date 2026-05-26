@@ -27,7 +27,7 @@ function LoginContent() {
 
   const nextPath = useMemo(() => {
     const raw = searchParams.get("next");
-    if (!raw || !raw.startsWith("/")) return "/";
+    if (!raw || !raw.startsWith("/")) return "/board";
     return raw;
   }, [searchParams]);
 
@@ -53,7 +53,7 @@ function LoginContent() {
         .eq("id", user.id)
         .maybeSingle();
 
-      if (data?.role === "admin" && nextPath === "/") {
+      if (data?.role === "admin" && (nextPath === "/" || nextPath === "/board")) {
         router.replace("/admin");
       } else {
         router.replace(nextPath);
@@ -119,7 +119,7 @@ function LoginContent() {
         .eq("id", loggedInUser.id)
         .maybeSingle();
 
-      if (profile?.role === "admin" && nextPath === "/") {
+      if (profile?.role === "admin" && (nextPath === "/" || nextPath === "/board")) {
         router.replace("/admin");
         setSubmitting(false);
         return;
@@ -271,11 +271,7 @@ function LoginContent() {
               </button>
             </p>
           )}
-          <p className="mt-3">
-            <Link href="/" className="text-slate-500 underline-offset-2 hover:underline">
-              Kembali ke board
-            </Link>
-          </p>
+          {/* Removed the "Kembali ke board" link per request */}
         </div>
       </div>
     </main>

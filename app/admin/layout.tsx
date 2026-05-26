@@ -4,6 +4,78 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useSupabaseAuth } from "@/hooks/useSupabaseAuth";
 import { useEffect, useState } from "react";
+import { useReportNotifications } from "@/hooks/useReportNotifications";
+
+function NotificationButton({ pathname, router }: { pathname?: string; router?: any }) {
+  const { unreadCount, loading, markAllAsRead, refresh } = useReportNotifications();
+  const [processing, setProcessing] = useState(false);
+
+  const handleClick = async () => {
+    if (processing) return;
+    setProcessing(true);
+    try {
+      // Ensure we have latest reports, then mark read, then refresh to reflect changes
+      await refresh?.();
+      await markAllAsRead?.();
+      await refresh?.();
+    } catch (err) {
+      // ignore
+    } finally {
+      setProcessing(false);
+    }
+    if (typeof window === "undefined") return;
+
+    if (pathname === "/admin") {
+      const el = document.getElementById("admin-reports");
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+        return;
+      }
+
+      // Fallback: set hash and attempt to scroll after a tick
+      try {
+        window.location.hash = "#admin-reports";
+      } catch (err) {
+        // ignore
+      }
+
+      setTimeout(() => {
+        const retry = document.getElementById("admin-reports");
+        if (retry) retry.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 200);
+
+      return;
+    }
+
+    // Not on admin: navigate there with hash
+    if (router?.push) {
+      router.push("/admin#admin-reports");
+    } else {
+      try {
+        window.location.href = "/admin#admin-reports";
+      } catch (err) {
+        // ignore
+      }
+    }
+  };
+
+  return (
+    <button
+      onClick={handleClick}
+      className="relative rounded-lg p-2 text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-700"
+      aria-label={loading ? "Loading notifications" : `${unreadCount} open reports`}
+    >
+      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+      </svg>
+      {unreadCount > 0 && (
+        <span className="absolute -right-1 -top-1 h-4 min-w-4 rounded-full bg-rose-500 px-1 text-[10px] font-semibold leading-4 text-white">
+          {unreadCount > 9 ? "9+" : unreadCount}
+        </span>
+      )}
+    </button>
+  );
+}
 import { supabase } from "@/lib/supabase";
 
 const navItems = [
@@ -136,11 +208,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <main className="ml-56 flex-1">
         {/* Top bar */}
         <div className="sticky top-0 z-20 flex items-center justify-end gap-3 border-b border-gray-200 bg-white/80 px-6 py-3 backdrop-blur-sm">
-          <button className="relative rounded-lg p-2 text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-700">
-            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-            </svg>
-          </button>
+          <NotificationButton pathname={pathname} router={router} />
+        
           <button
             onClick={handleLogout}
             className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3.5 py-1.5 text-sm font-medium text-red-600 transition-colors hover:bg-red-100"

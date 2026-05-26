@@ -327,7 +327,7 @@ export default function Board() {
     }) => {
       if (!user) {
         setAuthNotice("Kamu harus login dulu sebelum menambah task.");
-        router.push("/login?next=/");
+        router.push("/login?next=/board");
         return;
       }
 
@@ -342,7 +342,7 @@ export default function Board() {
 
     if (!user) {
       setAuthNotice("Kamu harus register/login dulu sebelum membuat task.");
-      router.push("/login?next=/");
+      router.push("/login?next=/board");
       return;
     }
 
